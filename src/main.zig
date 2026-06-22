@@ -73,6 +73,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\Commands:
                     \\  :status  show current routing state
                     \\  :reset-routing reset routing to defaults
+                    \\  :plan    preview workflow plan
                     \\  :route   preview routing without running
                     \\  :replay  show ledger replay for run id
                     \\  :doctor  show agent health
@@ -135,6 +136,10 @@ fn repl(init: std.process.Init) !u8 {
             .apply => {
                 dry_run = false;
                 try replaceLog(init.gpa, &last_output, "apply=true\n");
+                try writer.interface.writeAll(last_output);
+            },
+            .plan => |task| {
+                try runPlanPreview(init, &last_output, task, planner);
                 try writer.interface.writeAll(last_output);
             },
             .route => |task| {
@@ -228,6 +233,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":help",
         ":status",
         ":reset-routing",
+        ":plan ",
         ":route ",
         ":replay ",
         ":doctor",
@@ -464,6 +470,7 @@ fn handleInteractiveLine(
             \\Commands:
             \\  :status  show current routing state
             \\  :reset-routing reset routing to defaults
+            \\  :plan    preview workflow plan
             \\  :route   preview routing without running
             \\  :replay  show ledger replay for run id
             \\  :doctor  show agent health
@@ -507,6 +514,7 @@ fn handleInteractiveLine(
             dry_run.* = false;
             try replaceLog(init.gpa, last_output, "apply=true\n");
         },
+        .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
         .replay => |run_id| try runReplay(init, last_output, run_id),
         .agent => |value| {
@@ -668,6 +676,21 @@ fn runReplay(init: std.process.Init, log: *[]u8, run_id: []const u8) !void {
     const text = try runCommandText(init, &args);
     defer init.gpa.free(text);
     try appendLog(init.gpa, log, run_id, text);
+}
+
+fn runPlanPreview(init: std.process.Init, log: *[]u8, task: []const u8, planner: []const u8) !void {
+    var args = std.array_list.Managed([]const u8).init(init.gpa);
+    defer args.deinit();
+    try args.append("openfugu");
+    try args.append("plan");
+    if (!std.mem.eql(u8, planner, "heuristic")) {
+        try args.append("--planner");
+        try args.append(planner);
+    }
+    try args.append(task);
+    const text = try runCommandText(init, args.items);
+    defer init.gpa.free(text);
+    try appendLog(init.gpa, log, task, text);
 }
 
 fn runRoutePreview(

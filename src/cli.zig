@@ -205,6 +205,7 @@ pub const InteractiveInput = union(enum) {
     reset_routing,
     dry_run,
     apply,
+    plan: []const u8,
     route: []const u8,
     replay: []const u8,
     agent: []const u8,
@@ -229,6 +230,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":reset-routing")) return .reset_routing;
     if (std.mem.eql(u8, task, ":dry-run")) return .dry_run;
     if (std.mem.eql(u8, task, ":apply")) return .apply;
+    if (commandValue(task, ":plan")) |value| return .{ .plan = value };
     if (commandValue(task, ":route")) |value| return .{ .route = value };
     if (commandValue(task, ":replay")) |value| return .{ .replay = value };
     if (commandValue(task, ":agent")) |value| return .{ .agent = value };
