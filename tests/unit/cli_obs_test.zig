@@ -266,3 +266,9 @@ test "help prints cli usage" {
     try std.testing.expect(std.mem.indexOf(u8, help, "openfugu doctor") != null);
     try std.testing.expect(std.mem.indexOf(u8, help, "--no-apply") != null);
 }
+
+test "interactive input classifies prompt lines" {
+    try std.testing.expectEqualStrings("fix README", openfugu.cli.interactiveInput("  fix README\n").task);
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.empty, openfugu.cli.interactiveInput(" \n"));
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.quit, openfugu.cli.interactiveInput(":quit\n"));
+}

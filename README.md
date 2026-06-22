@@ -71,6 +71,7 @@ ledger.
 
 ```sh
 openfugu --help
+openfugu
 
 # Run setup and dependency diagnostics
 openfugu doctor
@@ -80,3 +81,6 @@ openfugu --explain-routing "your task"
 ```
 
 Use the `--no-apply` flag to perform dry runs.
+
+Running `openfugu` without arguments starts the interactive TUI. Type a task to
+route and execute it, or type `:quit` to exit.

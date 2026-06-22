@@ -189,9 +189,25 @@ fn isHelp(arg: []const u8) bool {
     return std.mem.eql(u8, arg, "help") or std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h");
 }
 
+pub const InteractiveInput = union(enum) {
+    empty,
+    quit,
+    task: []const u8,
+};
+
+pub fn interactiveInput(input: []const u8) InteractiveInput {
+    const task = std.mem.trim(u8, input, " \t\r\n");
+    if (task.len == 0) return .empty;
+    if (std.mem.eql(u8, task, ":quit") or std.mem.eql(u8, task, ":exit")) return .quit;
+    return .{ .task = task };
+}
+
 fn helpText(allocator: std.mem.Allocator) ![]u8 {
     return allocator.dupe(u8,
         \\Usage: openfugu [options] "task"
+        \\       openfugu
+        \\
+        \\Run without arguments to start the interactive TUI.
         \\
         \\Commands:
         \\  openfugu doctor
