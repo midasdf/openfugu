@@ -272,3 +272,14 @@ test "interactive input classifies prompt lines" {
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.empty, openfugu.cli.interactiveInput(" \n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.quit, openfugu.cli.interactiveInput(":quit\n"));
 }
+
+test "tui render draws fullscreen frame" {
+    const screen = try openfugu.tui.render(std.testing.allocator, "ready", "fix README", "router=heuristic\n");
+    defer std.testing.allocator.free(screen);
+
+    try std.testing.expect(std.mem.indexOf(u8, screen, "\x1b[2J") != null);
+    try std.testing.expect(std.mem.indexOf(u8, screen, "openfugu") != null);
+    try std.testing.expect(std.mem.indexOf(u8, screen, "ready") != null);
+    try std.testing.expect(std.mem.indexOf(u8, screen, "> fix README") != null);
+    try std.testing.expect(std.mem.indexOf(u8, screen, "router=heuristic") != null);
+}

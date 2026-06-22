@@ -9,6 +9,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const zigzag_dep = b.dependency("zigzag", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    mod.addImport("zigzag", zigzag_dep.module("zigzag"));
 
     const exe = b.addExecutable(.{
         .name = "openfugu",
@@ -19,6 +24,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     exe.root_module.addImport("openfugu", mod);
+    exe.root_module.addImport("zigzag", zigzag_dep.module("zigzag"));
     b.installArtifact(exe);
 
     const test_mod = b.createModule(.{
@@ -27,6 +33,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     test_mod.addImport("openfugu", mod);
+    test_mod.addImport("zigzag", zigzag_dep.module("zigzag"));
 
     const tests = b.addTest(.{
         .root_module = test_mod,
