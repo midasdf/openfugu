@@ -115,6 +115,91 @@ test "usage summary distinguishes unavailable token counts" {
     try std.testing.expectEqual(@as(u64, 1), summary.rate_limits);
 }
 
+test "usage cli reads ledger events from runtime directory" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+    const root = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "repo" });
+    defer std.testing.allocator.free(root);
+    const worktrees = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "worktrees" });
+    defer std.testing.allocator.free(worktrees);
+    const ledger_path = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "ledger.jsonl" });
+    defer std.testing.allocator.free(ledger_path);
+
+    try tmp.dir.createDirPath(std.testing.io, "repo");
+    try tmp.dir.createDirPath(std.testing.io, "worktrees");
+    try openfugu.ledger.append(std.testing.allocator, std.testing.io, ledger_path, .{
+        .run_id = "r1",
+        .agent = "codex",
+        .content = "first",
+        .accepted = true,
+    });
+    try openfugu.ledger.append(std.testing.allocator, std.testing.io, ledger_path, .{
+        .run_id = "r2",
+        .agent = "claude",
+        .content = "second",
+        .accepted = false,
+    });
+
+    var result = try openfugu.cli.runWithProbeSpecsInRepo(
+        std.testing.allocator,
+        std.testing.io,
+        &.{ "openfugu", "usage", "--since", "1d" },
+        &.{},
+        root,
+        worktrees,
+        &.{},
+    );
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(openfugu.cli.exit_ok, result.code);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "calls=2") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "successes=1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "failures=1") != null);
+}
+
+test "replay cli reads ledger without reexecuting children" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+    const root = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "repo" });
+    defer std.testing.allocator.free(root);
+    const worktrees = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "worktrees" });
+    defer std.testing.allocator.free(worktrees);
+    const ledger_path = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "ledger.jsonl" });
+    defer std.testing.allocator.free(ledger_path);
+
+    try tmp.dir.createDirPath(std.testing.io, "repo");
+    try tmp.dir.createDirPath(std.testing.io, "worktrees");
+    try openfugu.ledger.append(std.testing.allocator, std.testing.io, ledger_path, .{
+        .run_id = "run-123",
+        .agent = "codex",
+        .content = "prompt",
+        .accepted = true,
+        .reverified = true,
+    });
+
+    var result = try openfugu.cli.runWithProbeSpecsInRepo(
+        std.testing.allocator,
+        std.testing.io,
+        &.{ "openfugu", "replay", "run-123" },
+        &.{},
+        root,
+        worktrees,
+        &.{},
+    );
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(openfugu.cli.exit_ok, result.code);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "run-123") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "codex") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "no-child-process-reexecuted") != null);
+}
+
 test "trace line includes required orchestration fields" {
     const line = try openfugu.trace.line(std.testing.allocator, .{
         .turn = 1,

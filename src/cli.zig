@@ -77,6 +77,34 @@ pub fn runWithProbeSpecsInRepo(
     verify_commands: []const verify.Command,
 ) !Result {
     if (args.len <= 1) return run(allocator, args);
+    if (std.mem.eql(u8, args[1], "usage")) {
+        const ledger_path = try runLedgerPath(allocator, worktree_root);
+        defer allocator.free(ledger_path);
+        const text = std.Io.Dir.cwd().readFileAlloc(io, ledger_path, allocator, .limited(1024 * 1024)) catch "";
+        const owns_text = text.len != 0;
+        defer if (owns_text) allocator.free(text);
+        const summary = usage.summarizeLedgerText(text);
+        return .{
+            .code = exit_ok,
+            .text = try std.fmt.allocPrint(allocator, "calls={d} reported={d} unavailable={d} rate_limits={d} successes={d} failures={d}\n", .{
+                summary.calls,
+                summary.reported_tokens,
+                summary.unavailable_tokens,
+                summary.rate_limits,
+                summary.successes,
+                summary.failures,
+            }),
+        };
+    }
+    if (std.mem.eql(u8, args[1], "replay")) {
+        if (args.len < 3) return error.InvalidArgs;
+        const ledger_path = try runLedgerPath(allocator, worktree_root);
+        defer allocator.free(ledger_path);
+        const text = std.Io.Dir.cwd().readFileAlloc(io, ledger_path, allocator, .limited(1024 * 1024)) catch "";
+        const owns_text = text.len != 0;
+        defer if (owns_text) allocator.free(text);
+        return .{ .code = exit_ok, .text = try replay.renderLedgerText(allocator, args[2], text) };
+    }
     if (std.mem.eql(u8, args[1], "doctor") or std.mem.eql(u8, args[1], "agents")) {
         const reports = try collectReports(allocator, io, specs);
         defer probe.freeReports(allocator, reports);
