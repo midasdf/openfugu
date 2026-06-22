@@ -66,6 +66,7 @@ fn repl(init: std.process.Init) !u8 {
             .help => {
                 try replaceLog(init.gpa, &last_output,
                     \\Commands:
+                    \\  :status  show current routing state
                     \\  :doctor  show agent health
                     \\  :agents  list runnable agents
                     \\  :dry-run toggle dry-run mode
@@ -90,6 +91,10 @@ fn repl(init: std.process.Init) !u8 {
                 defer init.gpa.free(agent_text);
                 try replaceLog(init.gpa, &agents, agent_text);
                 try appendLog(init.gpa, &last_output, ":agents", agent_text);
+                try writer.interface.writeAll(last_output);
+            },
+            .status => {
+                try replaceStatusLog(init.gpa, &last_output, dry_run, agent_filter, mode, planner, false);
                 try writer.interface.writeAll(last_output);
             },
             .dry_run => {
@@ -185,6 +190,7 @@ fn rawRepl(init: std.process.Init) !u8 {
     input.setCharLimit(4096);
     input.setSuggestions(&.{
         ":help",
+        ":status",
         ":doctor",
         ":agents",
         ":dry-run",
@@ -323,12 +329,7 @@ fn drawRaw(
     const fallback_size = tuiSize(init.environ_map);
     const width = if (size) |value| value.cols else fallback_size.width;
     const height = if (size) |value| value.rows else fallback_size.height;
-    const status = try std.fmt.allocPrint(init.gpa, "{s} agent={s} mode={s} planner={s}", .{
-        if (running) (if (dry_run) "running dry-run" else "running apply") else (if (dry_run) "ready dry-run" else "ready apply"),
-        agent_filter orelse "auto",
-        mode,
-        planner,
-    });
+    const status = try statusText(init.gpa, dry_run, agent_filter, mode, planner, running);
     defer init.gpa.free(status);
     const screen = try openfugu.tui.renderDashboardSized(init.gpa, .{
         .status = status,
@@ -341,6 +342,38 @@ fn drawRaw(
     try term.writer().writeAll(zz.ansi.screen_clear ++ zz.ansi.cursor_home);
     try term.writer().writeAll(screen);
     try term.flush();
+}
+
+fn statusText(
+    allocator: std.mem.Allocator,
+    dry_run: bool,
+    agent_filter: ?[]const u8,
+    mode: []const u8,
+    planner: []const u8,
+    running: bool,
+) ![]u8 {
+    return std.fmt.allocPrint(allocator, "{s} agent={s} mode={s} planner={s}", .{
+        if (running) (if (dry_run) "running dry-run" else "running apply") else (if (dry_run) "ready dry-run" else "ready apply"),
+        agent_filter orelse "auto",
+        mode,
+        planner,
+    });
+}
+
+fn replaceStatusLog(
+    allocator: std.mem.Allocator,
+    log: *[]u8,
+    dry_run: bool,
+    agent_filter: ?[]const u8,
+    mode: []const u8,
+    planner: []const u8,
+    running: bool,
+) !void {
+    const text = try statusText(allocator, dry_run, agent_filter, mode, planner, running);
+    defer allocator.free(text);
+    const line = try std.fmt.allocPrint(allocator, "{s}\n", .{text});
+    defer allocator.free(line);
+    try replaceLog(allocator, log, line);
 }
 
 fn handleInteractiveLine(
@@ -362,6 +395,7 @@ fn handleInteractiveLine(
         .clear => try replaceLog(init.gpa, last_output, "Cleared.\n"),
         .help => try replaceLog(init.gpa, last_output,
             \\Commands:
+            \\  :status  show current routing state
             \\  :doctor  show agent health
             \\  :agents  list runnable agents
             \\  :dry-run toggle dry-run mode
@@ -382,6 +416,7 @@ fn handleInteractiveLine(
             try replaceLog(init.gpa, agents, agent_text);
             try appendLog(init.gpa, last_output, ":agents", agent_text);
         },
+        .status => try replaceStatusLog(init.gpa, last_output, dry_run.*, agent_filter.*, mode.*, planner.*, job.* != null),
         .dry_run => {
             dry_run.* = !dry_run.*;
             init.gpa.free(last_output.*);
