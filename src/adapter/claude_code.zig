@@ -2,8 +2,11 @@ const std = @import("std");
 const adapter = @import("adapter.zig");
 const types = @import("../core/types.zig");
 
+const auth_argv = [_][]const u8{ "claude", "auth", "status" };
+const api_key_env = [_][]const u8{"ANTHROPIC_API_KEY"};
+
 pub fn profileForVersion(version: []const u8) adapter.Profile {
-    if (!std.mem.eql(u8, version, "supported-1")) return unknownProfile();
+    if (!std.mem.eql(u8, version, "supported-1") and !std.mem.startsWith(u8, version, "2.")) return unknownProfile();
     return .{
         .name = "claude-code",
         .compatibility = .supported,
@@ -17,8 +20,8 @@ pub fn profileForVersion(version: []const u8) adapter.Profile {
             .workspace_write_mode = true,
             .max_context = null,
         },
-        .auth_check_argv = &.{ "claude", "auth", "status" },
-        .known_api_key_env = &.{"ANTHROPIC_API_KEY"},
+        .auth_check_argv = &auth_argv,
+        .known_api_key_env = &api_key_env,
     };
 }
 
@@ -29,7 +32,7 @@ pub fn buildInvocation(allocator: std.mem.Allocator, kind: adapter.ProfileKind, 
     };
     if (profile.compatibility != .supported) return error.UnsupportedProfile;
 
-    const permission = adapter.readMode(task.role);
+    const permission = claudePermissionMode(task.role);
     return adapter.ownInvocation(allocator, .{
         .executable = "claude",
         .argv = &.{ "claude", "-p", task.instruction, "--output-format", "stream-json", "--permission-mode", permission },
@@ -39,12 +42,19 @@ pub fn buildInvocation(allocator: std.mem.Allocator, kind: adapter.ProfileKind, 
     });
 }
 
+fn claudePermissionMode(role: types.Role) []const u8 {
+    return switch (role) {
+        .thinker, .verifier => "plan",
+        .worker => "acceptEdits",
+    };
+}
+
 fn unknownProfile() adapter.Profile {
     return .{
         .name = "claude-code",
         .compatibility = .unknown,
         .capability = .{},
-        .auth_check_argv = &.{ "claude", "auth", "status" },
-        .known_api_key_env = &.{"ANTHROPIC_API_KEY"},
+        .auth_check_argv = &auth_argv,
+        .known_api_key_env = &api_key_env,
     };
 }

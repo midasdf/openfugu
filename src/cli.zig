@@ -11,6 +11,13 @@ const claude_code = @import("adapter/claude_code.zig");
 const codex = @import("adapter/codex.zig");
 const antigravity = @import("adapter/antigravity.zig");
 
+const claude_version_argv = [_][]const u8{ "claude", "--version" };
+const claude_auth_argv = [_][]const u8{ "claude", "auth", "status" };
+const codex_version_argv = [_][]const u8{ "codex", "--version" };
+const codex_auth_argv = [_][]const u8{ "codex", "login", "status" };
+const agy_version_argv = [_][]const u8{ "agy", "--version" };
+const agy_auth_argv = [_][]const u8{ "agy", "auth", "status" };
+
 pub const exit_ok: u8 = 0;
 pub const exit_usage: u8 = 2;
 pub const exit_no_agent: u8 = 3;
@@ -42,7 +49,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !Result {
 }
 
 pub fn runWithIo(allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !Result {
-    return runWithProbeSpecs(allocator, io, args, defaultDetectSpecs());
+    const specs = defaultDetectSpecs();
+    return runWithProbeSpecs(allocator, io, args, &specs);
 }
 
 pub fn runWithProbeSpecs(
@@ -152,31 +160,31 @@ fn defaultAgentReports() []const probe.AgentReport {
     };
 }
 
-fn defaultDetectSpecs() []const probe.DetectSpec {
+fn defaultDetectSpecs() [3]probe.DetectSpec {
     const subscription = config.Config.default().subscription;
-    return &.{
+    return .{
         .{
             .name = "claude",
-            .version_argv = &.{ "claude", "--version" },
-            .auth_argv = &.{ "claude", "auth", "status" },
-            .supported_version = "supported-1",
-            .profile = claude_code.profileForVersion("supported-1"),
+            .version_argv = &claude_version_argv,
+            .auth_argv = &claude_auth_argv,
+            .supported_version = "2.",
+            .profile = claude_code.profileForVersion("2."),
             .subscription = subscription,
         },
         .{
             .name = "codex",
-            .version_argv = &.{ "codex", "--version" },
-            .auth_argv = &.{ "codex", "login", "status" },
-            .supported_version = "supported-1",
-            .profile = codex.profileForVersion("supported-1"),
+            .version_argv = &codex_version_argv,
+            .auth_argv = &codex_auth_argv,
+            .supported_version = "codex-cli 0.141.",
+            .profile = codex.profileForVersion("codex-cli 0.141."),
             .subscription = subscription,
         },
         .{
             .name = "agy",
-            .version_argv = &.{ "agy", "--version" },
-            .auth_argv = &.{ "agy", "auth", "status" },
-            .supported_version = "degraded-text",
-            .profile = antigravity.profileForVersion("degraded-text"),
+            .version_argv = &agy_version_argv,
+            .auth_argv = &agy_auth_argv,
+            .supported_version = "1.0.",
+            .profile = antigravity.profileForVersion("1.0."),
             .subscription = subscription,
         },
     };

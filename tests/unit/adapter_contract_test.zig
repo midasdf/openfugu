@@ -20,6 +20,7 @@ test "official adapters build non-interactive invocations by role" {
     try containsArg(claude.value.argv, "-p");
     try containsArg(claude.value.argv, "--output-format");
     try containsArg(claude.value.argv, "stream-json");
+    try containsArg(claude.value.argv, "acceptEdits");
     try noDangerousArg(claude.value.argv);
 
     var codex = try openfugu.codex.buildInvocation(std.testing.allocator, .supported_1, task);
@@ -38,10 +39,34 @@ test "official adapters build non-interactive invocations by role" {
     try noDangerousArg(agy.value.argv);
 }
 
+test "claude thinker uses plan mode" {
+    const task: openfugu.types.Task = .{
+        .id = "t1",
+        .role = .thinker,
+        .intent = .analyze,
+        .instruction = "inspect",
+        .worktree_path = "/tmp/work",
+        .context = "ctx",
+        .target_files = &.{},
+        .timeout_ms = 1000,
+        .read_only = true,
+    };
+
+    var claude = try openfugu.claude_code.buildInvocation(std.testing.allocator, .supported_1, task);
+    defer claude.deinit(std.testing.allocator);
+    try containsArg(claude.value.argv, "plan");
+}
+
 test "unknown versions are not treated as supported" {
     try std.testing.expectEqual(openfugu.types.Compatibility.unknown, openfugu.claude_code.profileForVersion("unverified").compatibility);
     try std.testing.expectEqual(openfugu.types.Compatibility.unknown, openfugu.codex.profileForVersion("unverified").compatibility);
     try std.testing.expectEqual(openfugu.types.Compatibility.unknown, openfugu.antigravity.profileForVersion("unverified").compatibility);
+}
+
+test "locally verified version prefixes are treated as compatible" {
+    try std.testing.expectEqual(openfugu.types.Compatibility.supported, openfugu.claude_code.profileForVersion("2.1.183 (Claude Code)").compatibility);
+    try std.testing.expectEqual(openfugu.types.Compatibility.supported, openfugu.codex.profileForVersion("codex-cli 0.141.0").compatibility);
+    try std.testing.expectEqual(openfugu.types.Compatibility.degraded, openfugu.antigravity.profileForVersion("1.0.10").compatibility);
 }
 
 test "subscription-only rejects api key unauthenticated and unknown auth" {

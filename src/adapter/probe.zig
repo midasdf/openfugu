@@ -53,7 +53,7 @@ pub fn detect(allocator: std.mem.Allocator, io: std.Io, spec: DetectSpec) !Agent
         .cwd = ".",
         .stdout_tail_bytes = 2048,
         .stderr_tail_bytes = 2048,
-        .timeout_ms = 1000,
+        .timeout_ms = 5000,
     }) catch return missing(spec.name);
     defer version_result.deinit(allocator);
 
@@ -66,12 +66,12 @@ pub fn detect(allocator: std.mem.Allocator, io: std.Io, spec: DetectSpec) !Agent
         .cwd = ".",
         .stdout_tail_bytes = 2048,
         .stderr_tail_bytes = 2048,
-        .timeout_ms = 1000,
+        .timeout_ms = 5000,
     });
     defer auth_result.deinit(allocator);
 
-    const auth = if (auth_result.exit_code == 0) classifyAuth(auth_result.stdout_tail) else .unknown;
-    const compatibility: types.Compatibility = if (std.mem.eql(u8, version, spec.supported_version))
+    const auth = if (auth_result.exit_code == 0) classifyAuth(auth_result.stdout_tail, auth_result.stderr_tail) else .unknown;
+    const compatibility: types.Compatibility = if (std.mem.startsWith(u8, version, spec.supported_version))
         spec.profile.compatibility
     else
         .unknown;
@@ -107,10 +107,15 @@ fn missing(name: []const u8) AgentReport {
     };
 }
 
-fn classifyAuth(text: []const u8) types.AuthKind {
-    if (std.mem.indexOf(u8, text, "api_key") != null) return .api_key;
-    if (std.mem.indexOf(u8, text, "organization_subscription") != null) return .organization_subscription;
-    if (std.mem.indexOf(u8, text, "subscription") != null) return .subscription;
-    if (std.mem.indexOf(u8, text, "unauthenticated") != null) return .unauthenticated;
+fn classifyAuth(stdout: []const u8, stderr: []const u8) types.AuthKind {
+    if (hasAuthText(stdout, "api_key") or hasAuthText(stderr, "api_key")) return .api_key;
+    if (hasAuthText(stdout, "organization_subscription") or hasAuthText(stderr, "organization_subscription")) return .organization_subscription;
+    if (hasAuthText(stdout, "subscription") or hasAuthText(stderr, "subscription")) return .subscription;
+    if (hasAuthText(stdout, "Logged in using ChatGPT") or hasAuthText(stderr, "Logged in using ChatGPT")) return .subscription;
+    if (hasAuthText(stdout, "unauthenticated") or hasAuthText(stderr, "unauthenticated")) return .unauthenticated;
     return .unknown;
+}
+
+fn hasAuthText(text: []const u8, needle: []const u8) bool {
+    return std.mem.indexOf(u8, text, needle) != null;
 }

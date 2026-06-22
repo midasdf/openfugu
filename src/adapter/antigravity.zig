@@ -2,8 +2,11 @@ const std = @import("std");
 const adapter = @import("adapter.zig");
 const types = @import("../core/types.zig");
 
+const auth_argv = [_][]const u8{ "agy", "auth", "status" };
+const api_key_env = [_][]const u8{ "GOOGLE_API_KEY", "GEMINI_API_KEY" };
+
 pub fn profileForVersion(version: []const u8) adapter.Profile {
-    if (!std.mem.eql(u8, version, "degraded-text")) return unknownProfile();
+    if (!std.mem.eql(u8, version, "degraded-text") and !std.mem.startsWith(u8, version, "1.0.")) return unknownProfile();
     return .{
         .name = "antigravity",
         .compatibility = .degraded,
@@ -17,8 +20,8 @@ pub fn profileForVersion(version: []const u8) adapter.Profile {
             .workspace_write_mode = true,
             .max_context = null,
         },
-        .auth_check_argv = &.{ "agy", "auth", "status" },
-        .known_api_key_env = &.{ "GOOGLE_API_KEY", "GEMINI_API_KEY" },
+        .auth_check_argv = &auth_argv,
+        .known_api_key_env = &api_key_env,
     };
 }
 
@@ -43,7 +46,7 @@ fn unknownProfile() adapter.Profile {
         .name = "antigravity",
         .compatibility = .unknown,
         .capability = .{},
-        .auth_check_argv = &.{ "agy", "auth", "status" },
-        .known_api_key_env = &.{ "GOOGLE_API_KEY", "GEMINI_API_KEY" },
+        .auth_check_argv = &auth_argv,
+        .known_api_key_env = &api_key_env,
     };
 }
