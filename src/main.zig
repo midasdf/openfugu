@@ -199,15 +199,12 @@ fn repl(init: std.process.Init) !u8 {
                 try writer.interface.writeAll(last_output);
             },
             .load => |path| {
-                const text = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024));
-                defer init.gpa.free(text);
-                const task = std.mem.trim(u8, text, " \t\r\n");
-                if (task.len == 0) {
-                    try replaceLog(init.gpa, &last_output, "empty task file\n");
+                const text = loadTaskFile(init, &last_output, path) catch {
                     try writer.interface.writeAll(last_output);
                     continue;
-                }
-                try runReplTask(init, &last_output, &history, task, dry_run, agent_filter, mode, planner);
+                };
+                defer init.gpa.free(text);
+                try runReplTask(init, &last_output, &history, text, dry_run, agent_filter, mode, planner);
                 try writer.interface.writeAll(last_output);
             },
             .plan => |task| {
@@ -302,6 +299,25 @@ fn runReplTask(
     };
     defer result.deinit(init.gpa);
     try appendLog(init.gpa, last_output, task, result.text);
+}
+
+fn loadTaskFile(init: std.process.Init, last_output: *[]u8, path: []const u8) ![]u8 {
+    const text = std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024)) catch |err| {
+        const message = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+        defer init.gpa.free(message);
+        try replaceLog(init.gpa, last_output, message);
+        return err;
+    };
+    const task = std.mem.trim(u8, text, " \t\r\n");
+    if (task.len == 0) {
+        init.gpa.free(text);
+        try replaceLog(init.gpa, last_output, "empty task file\n");
+        return error.InvalidArgs;
+    }
+    if (task.len == text.len) return text;
+    const copy = try init.gpa.dupe(u8, task);
+    init.gpa.free(text);
+    return copy;
 }
 
 fn rawRepl(init: std.process.Init) !u8 {
@@ -475,6 +491,14 @@ fn rawRepl(init: std.process.Init) !u8 {
                             if (last_task) |old| init.gpa.free(old);
                             last_task = try init.gpa.dupe(u8, task);
                             try input_history.append(try init.gpa.dupe(u8, task));
+                            try saveInputHistory(init, &input_history);
+                        },
+                        .load => |path| {
+                            const text = loadTaskFile(init, &last_output, path) catch continue;
+                            defer init.gpa.free(text);
+                            if (last_task) |old| init.gpa.free(old);
+                            last_task = try init.gpa.dupe(u8, text);
+                            try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n")));
                             try saveInputHistory(init, &input_history);
                         },
                         else => {
@@ -773,14 +797,9 @@ fn handleInteractiveLine(
             try changeCwd(init, last_output, path);
         },
         .load => |path| {
-            const text = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024));
+            const text = loadTaskFile(init, last_output, path) catch return false;
             defer init.gpa.free(text);
-            const task = std.mem.trim(u8, text, " \t\r\n");
-            if (task.len == 0) {
-                try replaceLog(init.gpa, last_output, "empty task file\n");
-                return false;
-            }
-            try startOpenfuguTask(init, task, last_output, agents, history, dry_run, agent_filter, mode, planner, term, job);
+            try startOpenfuguTask(init, text, last_output, agents, history, dry_run, agent_filter, mode, planner, term, job);
         },
         .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
