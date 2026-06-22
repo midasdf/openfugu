@@ -402,7 +402,9 @@ fn runFirstRunnableSpec(
     sortRoutingCandidates(candidates[0..candidate_count]);
 
     for (candidates[0..candidate_count]) |*candidate| {
-        var owned_invocation = try invocationForSpec(allocator, candidate.spec, task_text);
+        const candidate_path = try candidateWorktreePath(allocator, io, worktree_root, candidate.report.name);
+        defer allocator.free(candidate_path);
+        var owned_invocation = try invocationForSpec(allocator, candidate.spec, task_text, candidate_path);
         defer owned_invocation.deinit(allocator);
         var summary = try conductor.runInvocationSingle(allocator, .{
             .repo_path = repo_path,
@@ -622,7 +624,19 @@ fn ledgerStatsForAgent(allocator: std.mem.Allocator, io: std.Io, path: []const u
     return out;
 }
 
-fn invocationForSpec(allocator: std.mem.Allocator, spec: probe.DetectSpec, task_text_value: []const u8) !adapter.OwnedInvocation {
+fn candidateWorktreePath(allocator: std.mem.Allocator, io: std.Io, worktree_root: []const u8, agent: []const u8) ![]u8 {
+    const name = try std.fmt.allocPrint(allocator, "cli-candidate-{s}", .{agent});
+    defer allocator.free(name);
+    const path = try std.fs.path.join(allocator, &.{ worktree_root, name });
+    errdefer allocator.free(path);
+    if (path.len != 0 and path[0] == '/') return path;
+    const cwd = try std.process.currentPathAlloc(io, allocator);
+    defer allocator.free(cwd);
+    defer allocator.free(path);
+    return std.fs.path.join(allocator, &.{ cwd, path });
+}
+
+fn invocationForSpec(allocator: std.mem.Allocator, spec: probe.DetectSpec, task_text_value: []const u8, worktree_path: []const u8) !adapter.OwnedInvocation {
     if (spec.task_argv) |argv| {
         return adapter.ownInvocation(allocator, .{
             .executable = argv[0],
@@ -636,7 +650,7 @@ fn invocationForSpec(allocator: std.mem.Allocator, spec: probe.DetectSpec, task_
         .role = .worker,
         .intent = .implement,
         .instruction = task_text_value,
-        .worktree_path = ".",
+        .worktree_path = worktree_path,
         .context = "",
         .target_files = &.{},
         .timeout_ms = 180000,

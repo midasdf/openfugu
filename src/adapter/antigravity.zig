@@ -32,13 +32,17 @@ pub fn buildInvocation(allocator: std.mem.Allocator, kind: adapter.ProfileKind, 
     };
     if (profile.compatibility != .degraded) return error.UnsupportedProfile;
 
-    return adapter.ownInvocation(allocator, .{
+    const prompt = try std.fmt.allocPrint(allocator, "Use this exact workspace path for all file changes: {s}\n{s}", .{ task.worktree_path, task.instruction });
+    errdefer allocator.free(prompt);
+    const argv = try allocator.dupe([]const u8, &.{ "agy", "-p", prompt });
+    errdefer allocator.free(argv);
+    return .{ .value = .{
         .executable = "agy",
-        .argv = &.{ "agy", "-p", task.instruction },
+        .argv = argv,
         .cwd = task.worktree_path,
         .stdin = task.context,
         .output_format = .text,
-    });
+    }, .owned_text = prompt };
 }
 
 fn unknownProfile() adapter.Profile {

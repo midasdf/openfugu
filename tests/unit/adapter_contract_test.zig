@@ -36,6 +36,7 @@ test "official adapters build non-interactive invocations by role" {
     defer agy.deinit(std.testing.allocator);
     try std.testing.expectEqualStrings("agy", agy.value.executable);
     try containsArg(agy.value.argv, "-p");
+    try containsArgContaining(agy.value.argv, "/tmp/work");
     try std.testing.expectEqual(openfugu.types.OutputFormat.text, agy.value.output_format);
     try noDangerousArg(agy.value.argv);
 }
@@ -83,6 +84,13 @@ test "subscription-only rejects api key unauthenticated and unknown auth" {
 fn containsArg(argv: []const []const u8, expected: []const u8) !void {
     for (argv) |arg| {
         if (std.mem.eql(u8, arg, expected)) return;
+    }
+    return error.MissingArg;
+}
+
+fn containsArgContaining(argv: []const []const u8, expected: []const u8) !void {
+    for (argv) |arg| {
+        if (std.mem.indexOf(u8, arg, expected) != null) return;
     }
     return error.MissingArg;
 }

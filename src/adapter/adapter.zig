@@ -18,9 +18,11 @@ pub const ProfileKind = enum {
 
 pub const OwnedInvocation = struct {
     value: types.Invocation,
+    owned_text: ?[]u8 = null,
 
     pub fn deinit(self: *OwnedInvocation, allocator: std.mem.Allocator) void {
         allocator.free(self.value.argv);
+        if (self.owned_text) |text| allocator.free(text);
         self.* = undefined;
     }
 };
