@@ -5,6 +5,7 @@ pub const Command = struct {
     name: []const u8,
     argv: []const []const u8,
     timeout_ms: ?i64 = null,
+    log_path: ?[]const u8 = null,
 };
 
 pub const CommandResult = struct {
@@ -13,10 +14,12 @@ pub const CommandResult = struct {
     signal: ?u32 = null,
     timed_out: bool = false,
     canceled: bool = false,
+    log_path: ?[]u8 = null,
     stdout_tail: []u8,
     stderr_tail: []u8,
 
     pub fn deinit(self: *CommandResult, allocator: std.mem.Allocator) void {
+        if (self.log_path) |path| allocator.free(path);
         allocator.free(self.stdout_tail);
         allocator.free(self.stderr_tail);
         self.* = undefined;
@@ -61,6 +64,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, cwd: []const u8, commands: 
             .stdout_tail_bytes = 4096,
             .stderr_tail_bytes = 4096,
             .timeout_ms = command.timeout_ms,
+            .log_path = command.log_path,
         });
         defer raw.deinit(allocator);
 
@@ -70,6 +74,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, cwd: []const u8, commands: 
             .signal = raw.signal,
             .timed_out = raw.timed_out,
             .canceled = raw.canceled,
+            .log_path = if (command.log_path) |path| try allocator.dupe(u8, path) else null,
             .stdout_tail = try allocator.dupe(u8, raw.stdout_tail),
             .stderr_tail = try allocator.dupe(u8, raw.stderr_tail),
         };

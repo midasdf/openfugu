@@ -113,6 +113,28 @@ test "objective verifier records timed out commands as failed" {
     try std.testing.expect(verification.commands[0].exit_code == null);
 }
 
+test "objective verifier records command log path" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+    const log_path = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "verify.log" });
+    defer std.testing.allocator.free(log_path);
+
+    const fake_agent = test_options.fake_agent_path;
+    const argv = [_][]const u8{fake_agent};
+    var verification = try openfugu.verify.run(std.testing.allocator, std.testing.io, ".", &.{
+        .{ .name = "fake", .argv = &argv, .log_path = log_path },
+    });
+    defer verification.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualStrings(log_path, verification.commands[0].log_path.?);
+    const logged = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, log_path, std.testing.allocator, .limited(4096));
+    defer std.testing.allocator.free(logged);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "fake out") != null);
+}
+
 test "signal cancellation terminates process group and reaps child" {
     const sleep_agent = test_options.sleep_agent_path;
     const argv = [_][]const u8{sleep_agent};
