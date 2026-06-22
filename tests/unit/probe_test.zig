@@ -54,3 +54,22 @@ test "doctor cli uses probe specs instead of static unknown reports" {
     try std.testing.expect(std.mem.indexOf(u8, result.text, "auth=subscription") != null);
     try std.testing.expect(std.mem.indexOf(u8, result.text, "runnable=true") != null);
 }
+
+test "task cli runs first runnable probed subscription agent" {
+    const specs = [_]openfugu.probe.DetectSpec{.{
+        .name = "fake",
+        .version_argv = &.{ test_options.probe_cli_path, "--version" },
+        .auth_argv = &.{ test_options.probe_cli_path, "auth" },
+        .task_argv = &.{test_options.fake_agent_path},
+        .supported_version = "supported-1",
+        .profile = openfugu.claude_code.profileForVersion("supported-1"),
+        .subscription = openfugu.config.Config.default().subscription,
+    }};
+
+    var result = try openfugu.cli.runWithProbeSpecs(std.testing.allocator, std.testing.io, &.{ "openfugu", "fix bug" }, &specs);
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(openfugu.cli.exit_ok, result.code);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "agent=fake") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "fake out") != null);
+}

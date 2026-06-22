@@ -4,6 +4,7 @@ const heuristic = @import("planner/heuristic.zig");
 const planner = @import("planner/planner.zig");
 const doctor = @import("obs/doctor.zig");
 const probe = @import("adapter/probe.zig");
+const runner = @import("proc/runner.zig");
 const usage = @import("obs/usage.zig");
 const replay = @import("obs/replay.zig");
 
@@ -60,6 +61,9 @@ pub fn runWithProbeSpecs(
             };
         }
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
+    }
+    if (isTaskCommand(args)) {
+        return runFirstRunnableSpec(allocator, io, specs);
     }
     return run(allocator, args);
 }
@@ -142,4 +146,27 @@ fn collectReports(allocator: std.mem.Allocator, io: std.Io, specs: []const probe
         reports[i] = try probe.detect(allocator, io, spec);
     }
     return reports;
+}
+
+fn runFirstRunnableSpec(allocator: std.mem.Allocator, io: std.Io, specs: []const probe.DetectSpec) !Result {
+    for (specs) |spec| {
+        const report_value = try probe.detect(allocator, io, spec);
+        if (!report_value.runnable) continue;
+        const argv = spec.task_argv orelse continue;
+        var raw = try runner.run(allocator, io, .{
+            .executable = argv[0],
+            .argv = argv,
+            .cwd = ".",
+            .timeout_ms = 180000,
+        });
+        defer raw.deinit(allocator);
+        return .{
+            .code = if (raw.exit_code == 0) exit_ok else exit_verify,
+            .text = try std.fmt.allocPrint(allocator, "agent={s} exit={?}\n{s}", .{ report_value.name, raw.exit_code, raw.stdout_tail }),
+        };
+    }
+    return .{
+        .code = exit_no_agent,
+        .text = try allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n"),
+    };
 }
