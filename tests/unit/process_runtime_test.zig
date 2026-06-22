@@ -34,6 +34,31 @@ test "runner captures stdout stderr exit code and normalized events" {
     try std.testing.expectEqual(openfugu.protocol.EventKind.final, result.events[result.events.len - 1].kind);
 }
 
+test "runner writes full stdout stderr log when path is provided" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+    const log_path = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "agent.log" });
+    defer std.testing.allocator.free(log_path);
+
+    const fake_agent = test_options.fake_agent_path;
+    const argv = [_][]const u8{fake_agent};
+    var result = try openfugu.runner.run(std.testing.allocator, std.testing.io, .{
+        .executable = fake_agent,
+        .argv = &argv,
+        .cwd = ".",
+        .log_path = log_path,
+    });
+    defer result.deinit(std.testing.allocator);
+
+    const logged = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, log_path, std.testing.allocator, .limited(4096));
+    defer std.testing.allocator.free(logged);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "fake out") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "fake err") != null);
+}
+
 test "mux runs multiple fake agents without dropping output" {
     const fake_agent = test_options.fake_agent_path;
 

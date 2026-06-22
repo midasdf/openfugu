@@ -12,6 +12,7 @@ pub const RunSpec = struct {
     stderr_tail_bytes: usize = 4096,
     timeout_ms: ?i64 = null,
     environ_map: ?*const std.process.Environ.Map = null,
+    log_path: ?[]const u8 = null,
 };
 
 pub const RunResult = struct {
@@ -65,6 +66,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, spec: RunSpec) !RunResult {
     };
     defer allocator.free(raw.stdout);
     defer allocator.free(raw.stderr);
+    try writeLog(io, spec.log_path, raw.stdout, raw.stderr);
 
     try s.transition(.draining);
     try s.transition(.exited);
@@ -132,6 +134,17 @@ fn timeoutFromMs(timeout_ms: ?i64) std.Io.Timeout {
         .raw = std.Io.Duration.fromMilliseconds(ms),
         .clock = .awake,
     } };
+}
+
+fn writeLog(io: std.Io, log_path: ?[]const u8, stdout: []const u8, stderr: []const u8) !void {
+    const path = log_path orelse return;
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    defer file.close(io);
+    var buf: [4096]u8 = undefined;
+    var writer = file.writer(io, &buf);
+    try writer.interface.writeAll(stdout);
+    try writer.interface.writeAll(stderr);
+    try writer.interface.flush();
 }
 
 fn timeoutFromUnsignedMs(timeout_ms: u64) i64 {
