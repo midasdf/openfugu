@@ -80,6 +80,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :doctor  show agent health
                     \\  :agents  list runnable agents
                     \\  :usage   show routing ledger summary
+                    \\  :where   show cwd and git branch
                     \\  :git     show git status
                     \\  :diff    show git diff stat
                     \\  :patch   show git patch
@@ -115,6 +116,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .usage => {
                 try runInteractiveCommand(init, &last_output, &.{ "openfugu", "usage" }, ":usage");
+                try writer.interface.writeAll(last_output);
+            },
+            .where_ => {
+                try runWhere(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .git => {
@@ -263,6 +268,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":doctor",
         ":agents",
         ":usage",
+        ":where",
         ":git",
         ":diff",
         ":patch",
@@ -570,6 +576,7 @@ fn handleInteractiveLine(
             \\  :doctor  show agent health
             \\  :agents  list runnable agents
             \\  :usage   show routing ledger summary
+            \\  :where   show cwd and git branch
             \\  :git     show git status
             \\  :diff    show git diff stat
             \\  :patch   show git patch
@@ -598,6 +605,7 @@ fn handleInteractiveLine(
             try appendLog(init.gpa, last_output, ":agents", agent_text);
         },
         .usage => try runInteractiveCommand(init, last_output, &.{ "openfugu", "usage" }, ":usage"),
+        .where_ => try runWhere(init, last_output),
         .git => try runGitStatus(init, last_output),
         .diff => try runGitDiff(init, last_output),
         .patch => try runGitPatch(init, last_output),
@@ -824,6 +832,27 @@ fn runInteractiveCommand(init: std.process.Init, log: *[]u8, args: []const []con
     const text = try runCommandText(init, args);
     defer init.gpa.free(text);
     try appendLog(init.gpa, log, label, text);
+}
+
+fn runWhere(init: std.process.Init, log: *[]u8) !void {
+    const cwd = try std.process.currentPathAlloc(init.io, init.gpa);
+    defer init.gpa.free(cwd);
+    var branch_result = openfugu.runner.run(init.gpa, init.io, .{
+        .executable = "git",
+        .argv = &.{ "git", "branch", "--show-current" },
+        .cwd = ".",
+        .stdout_tail_bytes = 256,
+        .stderr_tail_bytes = 0,
+        .timeout_ms = 1000,
+    }) catch null;
+    defer if (branch_result) |*result| result.deinit(init.gpa);
+    const branch = if (branch_result) |result|
+        std.mem.trim(u8, result.stdout_tail, " \t\r\n")
+    else
+        "unknown";
+    const text = try std.fmt.allocPrint(init.gpa, "cwd={s}\nbranch={s}\n", .{ cwd, if (branch.len == 0) "detached" else branch });
+    defer init.gpa.free(text);
+    try appendLog(init.gpa, log, ":where", text);
 }
 
 fn runGitStatus(init: std.process.Init, log: *[]u8) !void {
