@@ -1,11 +1,9 @@
 # openfugu
 
-openfugu is a local orchestration harness for official coding-agent CLIs that
-the user has already installed and logged into.
-
-The project is inspired by the coordination structures described in TRINITY and
-Conductor, but it does not reproduce trained coordinator weights, private
-routers, or benchmark claims from those papers.
+An experimental project that makes heavy use of LLM-generated code.
+It was inspired by Sakana AI's Fugu Ultra and the related papers.
+The official Sakana subscription is quite expensive, so I wanted to build an open version that you can use as long as you have subscriptions to Claude Code, Codex, and Antigravity (you need all three)—and that's why I'm sharing it here.
+Issues and pull requests are very welcome!
 
 ## Boundaries
 
