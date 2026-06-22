@@ -77,6 +77,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :doctor  show agent health
                     \\  :agents  list runnable agents
                     \\  :usage   show routing ledger summary
+                    \\  :git     show git status
                     \\  :dry-run toggle dry-run mode
                     \\  :apply   return to apply mode
                     \\  :agent   set agent: auto, claude, codex, agy
@@ -104,6 +105,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .usage => {
                 try runInteractiveCommand(init, &last_output, &.{ "openfugu", "usage" }, ":usage");
+                try writer.interface.writeAll(last_output);
+            },
+            .git => {
+                try runGitStatus(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .status => {
@@ -217,6 +222,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":doctor",
         ":agents",
         ":usage",
+        ":git",
         ":dry-run",
         ":apply",
         ":agent auto",
@@ -450,6 +456,7 @@ fn handleInteractiveLine(
             \\  :doctor  show agent health
             \\  :agents  list runnable agents
             \\  :usage   show routing ledger summary
+            \\  :git     show git status
             \\  :dry-run toggle dry-run mode
             \\  :apply   return to apply mode
             \\  :agent   set agent: auto, claude, codex, agy
@@ -470,6 +477,7 @@ fn handleInteractiveLine(
             try appendLog(init.gpa, last_output, ":agents", agent_text);
         },
         .usage => try runInteractiveCommand(init, last_output, &.{ "openfugu", "usage" }, ":usage"),
+        .git => try runGitStatus(init, last_output),
         .status => try replaceStatusLog(init.gpa, last_output, dry_run.*, agent_filter.*, mode.*, planner.*, job.* != null),
         .reset_routing => {
             try resetRouting(init.gpa, dry_run, agent_filter, mode, planner);
@@ -598,6 +606,25 @@ fn runInteractiveCommand(init: std.process.Init, log: *[]u8, args: []const []con
     const text = try runCommandText(init, args);
     defer init.gpa.free(text);
     try appendLog(init.gpa, log, label, text);
+}
+
+fn runGitStatus(init: std.process.Init, log: *[]u8) !void {
+    var result = openfugu.runner.run(init.gpa, init.io, .{
+        .executable = "git",
+        .argv = &.{ "git", "status", "--short", "--branch" },
+        .cwd = ".",
+        .stdout_tail_bytes = 8192,
+        .stderr_tail_bytes = 2048,
+        .timeout_ms = 5000,
+    }) catch |err| {
+        const text = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+        defer init.gpa.free(text);
+        try appendLog(init.gpa, log, ":git", text);
+        return;
+    };
+    defer result.deinit(init.gpa);
+    const text = if (result.exit_code == 0) result.stdout_tail else result.stderr_tail;
+    try appendLog(init.gpa, log, ":git", if (text.len == 0) "clean\n" else text);
 }
 
 fn runRoutePreview(

@@ -198,6 +198,7 @@ pub const InteractiveInput = union(enum) {
     doctor,
     agents,
     usage,
+    git,
     help,
     status,
     reset_routing,
@@ -219,6 +220,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":doctor")) return .doctor;
     if (std.mem.eql(u8, task, ":agents")) return .agents;
     if (std.mem.eql(u8, task, ":usage")) return .usage;
+    if (std.mem.eql(u8, task, ":git")) return .git;
     if (std.mem.eql(u8, task, ":help")) return .help;
     if (std.mem.eql(u8, task, ":status")) return .status;
     if (std.mem.eql(u8, task, ":reset-routing")) return .reset_routing;
