@@ -254,4 +254,6 @@ test "mode flags still fail closed when no agent is runnable" {
 test "invalid task flags return usage errors" {
     try std.testing.expectError(error.InvalidArgs, openfugu.cli.run(std.testing.allocator, &.{ "openfugu", "--mode" }));
     try std.testing.expectError(error.InvalidArgs, openfugu.cli.run(std.testing.allocator, &.{ "openfugu", "--bogus", "fix" }));
+    try std.testing.expectError(error.InvalidArgs, openfugu.cli.run(std.testing.allocator, &.{ "openfugu", "--mode", "bogus", "fix" }));
+    try std.testing.expectError(error.InvalidArgs, openfugu.cli.runAlloc(std.testing.allocator, &.{ "openfugu", "plan", "--planner", "bogus", "fix" }));
 }

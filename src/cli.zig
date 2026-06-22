@@ -185,6 +185,7 @@ fn taskText(args: []const []const u8) !?[]const u8 {
         if (takesValue(arg)) {
             i += 1;
             if (i >= args.len) return error.InvalidArgs;
+            try validateOptionValue(arg, args[i]);
             continue;
         }
         if (std.mem.startsWith(u8, arg, "--")) return error.InvalidArgs;
@@ -200,6 +201,23 @@ fn takesValue(arg: []const u8) bool {
         std.mem.eql(u8, arg, "--depth");
 }
 
+fn validateOptionValue(flag: []const u8, value: []const u8) !void {
+    if (std.mem.eql(u8, flag, "--mode") and !validMode(value)) return error.InvalidArgs;
+    if (std.mem.eql(u8, flag, "--planner") and !validPlanner(value)) return error.InvalidArgs;
+}
+
+fn validMode(value: []const u8) bool {
+    return std.mem.eql(u8, value, "auto") or
+        std.mem.eql(u8, value, "single") or
+        std.mem.eql(u8, value, "race") or
+        std.mem.eql(u8, value, "ensemble");
+}
+
+fn validPlanner(value: []const u8) bool {
+    return std.mem.eql(u8, value, "heuristic") or
+        std.mem.eql(u8, value, "subscription-agent");
+}
+
 const PlanArgs = struct {
     backend: []const u8,
     request: []const u8,
@@ -209,6 +227,7 @@ fn parsePlanArgs(args: []const []const u8) !PlanArgs {
     if (args.len < 3) return error.InvalidArgs;
     if (std.mem.eql(u8, args[2], "--planner")) {
         if (args.len < 5) return error.InvalidArgs;
+        if (!validPlanner(args[3])) return error.InvalidArgs;
         return .{ .backend = args[3], .request = args[4] };
     }
     return .{ .backend = "heuristic", .request = args[2] };
