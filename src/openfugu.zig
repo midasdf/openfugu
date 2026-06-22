@@ -1,5 +1,9 @@
 pub const config = @import("config.zig");
 pub const types = @import("core/types.zig");
+pub const adapter = @import("adapter/adapter.zig");
+pub const antigravity = @import("adapter/antigravity.zig");
+pub const claude_code = @import("adapter/claude_code.zig");
+pub const codex = @import("adapter/codex.zig");
 pub const environment = @import("proc/environment.zig");
 pub const conductor = @import("conductor/loop.zig");
 pub const context = @import("context/broker.zig");
@@ -20,6 +24,10 @@ pub const fake = @import("adapter/fake.zig");
 test {
     _ = config;
     _ = types;
+    _ = adapter;
+    _ = antigravity;
+    _ = claude_code;
+    _ = codex;
     _ = environment;
     _ = conductor;
     _ = context;
