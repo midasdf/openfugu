@@ -61,6 +61,25 @@ test "validator rejects cycles and accepts forward-only dependencies" {
     try std.testing.expectError(error.CyclicDependency, openfugu.validate.validatePlan(plan));
 }
 
+test "subscription planner accepts minimal validated json plan" {
+    const raw =
+        \\{"topology":"one_shot","nodes":[{"id":1,"role":"worker","intent":"implement","instruction":"apply fix","creates_candidate":true}],"final_nodes":[1],"rationale":"direct"}
+    ;
+    var plan = try openfugu.subscription_agent.planOrFallback(std.testing.allocator, .{
+        .original_request = "fallback request",
+        .safe_repo_summary = "summary",
+    }, raw);
+    defer openfugu.planner.deinitPlan(std.testing.allocator, &plan);
+
+    try std.testing.expectEqual(openfugu.types.Topology.one_shot, plan.topology);
+    try std.testing.expectEqual(@as(usize, 1), plan.nodes.len);
+    try std.testing.expectEqual(@as(openfugu.types.NodeId, 1), plan.nodes[0].id);
+    try std.testing.expectEqual(openfugu.types.Role.worker, plan.nodes[0].role);
+    try std.testing.expectEqual(openfugu.types.Intent.implement, plan.nodes[0].intent);
+    try std.testing.expectEqualStrings("apply fix", plan.nodes[0].instruction);
+    try std.testing.expectEqual(@as(openfugu.types.NodeId, 1), plan.final_nodes[0]);
+}
+
 test "context broker includes only access-listed node output" {
     const outputs = [_]openfugu.context.NodeOutput{
         .{ .id = 1, .text = "allowed output" },
