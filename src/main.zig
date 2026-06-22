@@ -856,7 +856,8 @@ fn runLedgerTail(init: std.process.Init, log: *[]u8) !void {
         return;
     };
     defer init.gpa.free(text);
-    try appendLog(init.gpa, log, ":ledger", if (text.len == 0) "no ledger\n" else text);
+    const start = if (text.len > 8192) text.len - 8192 else 0;
+    try appendLog(init.gpa, log, ":ledger", if (text.len == 0) "no ledger\n" else text[start..]);
 }
 
 fn runWhere(init: std.process.Init, log: *[]u8) !void {
