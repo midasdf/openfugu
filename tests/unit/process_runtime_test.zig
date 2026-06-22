@@ -220,3 +220,24 @@ test "runner filters known api key environment for invocations" {
 
     try std.testing.expectEqual(@as(u8, 0), result.exit_code.?);
 }
+
+test "runner passes stdin while filtering invocation environment" {
+    const stdin_echo = test_options.stdin_echo_agent_path;
+    const argv = [_][]const u8{stdin_echo};
+
+    var parent_env = std.process.Environ.Map.init(std.testing.allocator);
+    defer parent_env.deinit();
+    try parent_env.put("PATH", "/bin");
+    try parent_env.put("OPENAI_API_KEY", "secret");
+
+    var result = try openfugu.runner.runInvocationWithEnvironment(std.testing.allocator, std.testing.io, .{
+        .executable = stdin_echo,
+        .argv = &argv,
+        .cwd = ".",
+        .stdin = "filtered context",
+        .env_policy = .inherit_filtered,
+    }, 1000, &parent_env);
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualStrings("filtered context", result.stdout_tail);
+}

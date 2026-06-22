@@ -97,7 +97,7 @@ pub fn runInvocation(
     timeout_ms: u64,
 ) !RunResult {
     if (invocation.stdin.len != 0) {
-        return runInvocationWithStdin(allocator, io, invocation, timeout_ms);
+        return runInvocationWithStdin(allocator, io, invocation, timeout_ms, null);
     }
     return run(allocator, io, .{
         .executable = invocation.executable,
@@ -122,6 +122,10 @@ pub fn runInvocationWithEnvironment(
 
     if (invocation.env_policy == .inherit_filtered) environment.stripKnownApiKeys(&child_env);
 
+    if (invocation.stdin.len != 0) {
+        return runInvocationWithStdin(allocator, io, invocation, timeout_ms, &child_env);
+    }
+
     return run(allocator, io, .{
         .executable = invocation.executable,
         .argv = invocation.argv,
@@ -144,6 +148,7 @@ fn runInvocationWithStdin(
     io: std.Io,
     invocation: types.Invocation,
     timeout_ms: u64,
+    environ_map: ?*const std.process.Environ.Map,
 ) !RunResult {
     var s = session.Session.init("run");
     try s.transition(.spawning);
@@ -155,6 +160,7 @@ fn runInvocationWithStdin(
         .stdin = .pipe,
         .stdout = .pipe,
         .stderr = .pipe,
+        .environ_map = environ_map,
     });
     defer child.kill(io);
 
