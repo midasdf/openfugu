@@ -116,8 +116,10 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_tests.step);
 
     const real_cli_tests = b.option(bool, "real-cli-tests", "Enable quota-consuming real CLI smoke tests") orelse false;
+    const real_cli_task_tests = b.option(bool, "real-cli-task-tests", "Enable model-invoking real CLI task smoke tests") orelse false;
     const smoke_options = b.addOptions();
     smoke_options.addOption(bool, "real_cli_tests", real_cli_tests);
+    smoke_options.addOption(bool, "real_cli_task_tests", real_cli_task_tests);
     const smoke_mod = b.createModule(.{
         .root_source_file = b.path("tests/smoke.zig"),
         .target = target,

@@ -38,3 +38,8 @@ test "real CLI smoke tests are opt-in" {
     }
     if (runnable == 0) return error.SkipZigTest;
 }
+
+test "real CLI task smoke requires second opt-in" {
+    if (!smoke_options.real_cli_task_tests) return error.SkipZigTest;
+    // ponytail: actual model task invocation belongs here; keep disabled unless both opt-ins are present.
+}
