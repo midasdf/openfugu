@@ -34,13 +34,23 @@ fn repl(init: std.process.Init) !u8 {
 
     var last_output = try init.gpa.dupe(u8, "Type a task and press Enter.\n");
     defer init.gpa.free(last_output);
+    var agents = try init.gpa.dupe(u8, ":agents to refresh\n");
+    defer init.gpa.free(agents);
+    var history = try init.gpa.dupe(u8, "No tasks yet.\n");
+    defer init.gpa.free(history);
     var dry_run = false;
 
     while (true) {
         const status = if (dry_run) "ready dry-run" else "ready apply";
         if (fullscreen) {
             const size = tuiSize(init.environ_map);
-            const screen = try openfugu.tui.renderSized(init.gpa, status, "", last_output, size.width, size.height);
+            const screen = try openfugu.tui.renderDashboardSized(init.gpa, .{
+                .status = status,
+                .input = "",
+                .output = last_output,
+                .agents = agents,
+                .history = history,
+            }, size.width, size.height);
             defer init.gpa.free(screen);
             try writer.interface.writeAll(screen);
         } else {
@@ -76,7 +86,10 @@ fn repl(init: std.process.Init) !u8 {
                 if (!fullscreen) try writer.interface.writeAll(last_output);
             },
             .agents => {
-                try runInteractiveCommand(init, &last_output, &.{ "openfugu", "agents" }, ":agents");
+                const agent_text = try runCommandText(init, &.{ "openfugu", "agents" });
+                defer init.gpa.free(agent_text);
+                try replaceLog(init.gpa, &agents, agent_text);
+                try appendLog(init.gpa, &last_output, ":agents", agent_text);
                 if (!fullscreen) try writer.interface.writeAll(last_output);
             },
             .dry_run => {
@@ -86,9 +99,16 @@ fn repl(init: std.process.Init) !u8 {
                 if (!fullscreen) try writer.interface.writeAll(last_output);
             },
             .task => |task| {
+                try appendHistory(init.gpa, &history, task);
                 if (fullscreen) {
                     const size = tuiSize(init.environ_map);
-                    const screen = try openfugu.tui.renderSized(init.gpa, if (dry_run) "running dry-run" else "running apply", task, last_output, size.width, size.height);
+                    const screen = try openfugu.tui.renderDashboardSized(init.gpa, .{
+                        .status = if (dry_run) "running dry-run" else "running apply",
+                        .input = task,
+                        .output = last_output,
+                        .agents = agents,
+                        .history = history,
+                    }, size.width, size.height);
                     defer init.gpa.free(screen);
                     try writer.interface.writeAll(screen);
                     try writer.interface.flush();
@@ -117,14 +137,17 @@ fn repl(init: std.process.Init) !u8 {
 }
 
 fn runInteractiveCommand(init: std.process.Init, log: *[]u8, args: []const []const u8, label: []const u8) !void {
+    const text = try runCommandText(init, args);
+    defer init.gpa.free(text);
+    try appendLog(init.gpa, log, label, text);
+}
+
+fn runCommandText(init: std.process.Init, args: []const []const u8) ![]u8 {
     var result = openfugu.cli.runWithIo(init.gpa, init.io, args) catch |err| {
-        const text = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
-        defer init.gpa.free(text);
-        try appendLog(init.gpa, log, label, text);
-        return;
+        return std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
     };
     defer result.deinit(init.gpa);
-    try appendLog(init.gpa, log, label, result.text);
+    return init.gpa.dupe(u8, result.text);
 }
 
 fn replaceLog(allocator: std.mem.Allocator, log: *[]u8, text: []const u8) !void {
@@ -137,6 +160,13 @@ fn appendLog(allocator: std.mem.Allocator, log: *[]u8, input: []const u8, output
     allocator.free(log.*);
     log.* = if (joined.len > 64 * 1024) try allocator.dupe(u8, joined[joined.len - 64 * 1024 ..]) else joined;
     if (joined.ptr != log.*.ptr) allocator.free(joined);
+}
+
+fn appendHistory(allocator: std.mem.Allocator, history: *[]u8, input: []const u8) !void {
+    const joined = try std.fmt.allocPrint(allocator, "{s}{s}\n", .{ if (std.mem.eql(u8, history.*, "No tasks yet.\n")) "" else history.*, input });
+    allocator.free(history.*);
+    history.* = if (joined.len > 4096) try allocator.dupe(u8, joined[joined.len - 4096 ..]) else joined;
+    if (joined.ptr != history.*.ptr) allocator.free(joined);
 }
 
 fn tuiSize(env: *const std.process.Environ.Map) struct { width: u16, height: u16 } {

@@ -303,3 +303,19 @@ test "tui render accepts terminal dimensions" {
 
     try std.testing.expect(std.mem.indexOf(u8, screen, "ok") != null);
 }
+
+test "tui dashboard includes agents and history" {
+    const screen = try openfugu.tui.renderDashboardSized(std.testing.allocator, .{
+        .status = "ready apply",
+        .input = "fix test",
+        .output = "router=heuristic\n",
+        .agents = "claude runnable\ncodex runnable\nagy runnable\n",
+        .history = "fix test\n",
+    }, 90, 24);
+    defer std.testing.allocator.free(screen);
+
+    try std.testing.expect(std.mem.indexOf(u8, screen, "Agents") != null);
+    try std.testing.expect(std.mem.indexOf(u8, screen, "claude runnable") != null);
+    try std.testing.expect(std.mem.indexOf(u8, screen, "History") != null);
+    try std.testing.expect(std.mem.indexOf(u8, screen, "fix test") != null);
+}
