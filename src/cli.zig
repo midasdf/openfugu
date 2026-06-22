@@ -94,7 +94,7 @@ pub fn runWithProbeSpecsInRepo(
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
     if (try taskText(args)) |task| {
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"));
     }
     return run(allocator, args);
 }
@@ -260,9 +260,11 @@ fn runFirstRunnableSpec(
     verify_commands: []const verify.Command,
     task_text: []const u8,
     no_apply: bool,
+    agents_filter: ?[]const u8,
 ) !Result {
     try std.Io.Dir.cwd().createDirPath(io, worktree_root);
     for (specs) |spec| {
+        if (!agentAllowed(agents_filter, spec.name)) continue;
         var report_value = try probe.detect(allocator, io, spec);
         defer report_value.deinit(allocator);
         if (!report_value.runnable) continue;
@@ -302,6 +304,24 @@ fn runFirstRunnableSpec(
 fn hasFlag(args: []const []const u8, flag: []const u8) bool {
     for (args) |arg| {
         if (std.mem.eql(u8, arg, flag)) return true;
+    }
+    return false;
+}
+
+fn optionValue(args: []const []const u8, flag: []const u8) ?[]const u8 {
+    var i: usize = 0;
+    while (i + 1 < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], flag)) return args[i + 1];
+    }
+    return null;
+}
+
+fn agentAllowed(filter: ?[]const u8, name: []const u8) bool {
+    const text = filter orelse return true;
+    var parts = std.mem.splitScalar(u8, text, ',');
+    while (parts.next()) |part_raw| {
+        const part = std.mem.trim(u8, part_raw, " \t\r\n");
+        if (std.mem.eql(u8, part, name)) return true;
     }
     return false;
 }
