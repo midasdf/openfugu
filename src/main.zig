@@ -371,7 +371,9 @@ fn rawRepl(init: std.process.Init) !u8 {
 
         const input_view = try input.view(init.gpa);
         defer init.gpa.free(input_view);
-        try drawRaw(init, &term, input_view, last_output, agents, history, dry_run, agent_filter, mode, planner, if (job) |running_job| running_job.label else null, output_offset);
+        const live_output = if (job) |running_job| try running_job.copyLive(init.gpa) else null;
+        defer if (live_output) |text| init.gpa.free(text);
+        try drawRaw(init, &term, input_view, live_output orelse last_output, agents, history, dry_run, agent_filter, mode, planner, if (job) |running_job| running_job.label else null, output_offset);
 
         var input_buf: [256]u8 = undefined;
         const read = try term.readInput(&input_buf, if (job == null) -1 else 100);
@@ -462,8 +464,10 @@ const TaskJob = struct {
     thread: std.Thread,
     done: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     cancel_requested: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+    live_mutex: std.atomic.Mutex = .unlocked,
     argv: [][]const u8,
     label: []u8,
+    live_text: ?[]u8 = null,
     text: ?[]u8 = null,
     code: u8 = openfugu.cli.exit_planner,
 
@@ -471,8 +475,28 @@ const TaskJob = struct {
         for (self.argv) |arg| allocator.free(arg);
         allocator.free(self.argv);
         allocator.free(self.label);
+        if (self.live_text) |text| std.heap.page_allocator.free(text);
         if (self.text) |text| std.heap.page_allocator.free(text);
         allocator.destroy(self);
+    }
+
+    fn copyLive(self: *TaskJob, allocator: std.mem.Allocator) !?[]u8 {
+        self.lockLive();
+        defer self.live_mutex.unlock();
+        return if (self.live_text) |text| try allocator.dupe(u8, text) else null;
+    }
+
+    fn appendLive(self: *TaskJob, text: []const u8) !void {
+        self.lockLive();
+        defer self.live_mutex.unlock();
+        const joined = try std.fmt.allocPrint(std.heap.page_allocator, "{s}{s}", .{ self.live_text orelse "", text });
+        if (self.live_text) |old| std.heap.page_allocator.free(old);
+        self.live_text = if (joined.len > 64 * 1024) try std.heap.page_allocator.dupe(u8, joined[joined.len - 64 * 1024 ..]) else joined;
+        if (joined.ptr != self.live_text.?.ptr) std.heap.page_allocator.free(joined);
+    }
+
+    fn lockLive(self: *TaskJob) void {
+        while (!self.live_mutex.tryLock()) std.Thread.yield() catch {};
     }
 };
 
@@ -818,46 +842,55 @@ fn runTaskChild(job: *TaskJob, io: std.Io) ![]u8 {
         .stderr = .pipe,
         .pgid = 0,
     });
-    defer child.kill(io);
 
-    var multi_reader_buffer: std.Io.File.MultiReader.Buffer(2) = undefined;
-    var multi_reader: std.Io.File.MultiReader = undefined;
-    multi_reader.init(std.heap.page_allocator, io, multi_reader_buffer.toStreams(), &.{ child.stdout.?, child.stderr.? });
-    defer multi_reader.deinit();
-    _ = multi_reader.reader(0);
-    _ = multi_reader.reader(1);
-
-    read_loop: while (true) {
-        if (job.cancel_requested.load(.acquire)) {
-            _ = signalChildGroup(child, .TERM);
-            try io.sleep(std.Io.Duration.fromMilliseconds(250), .awake);
-            _ = signalChildGroup(child, .KILL);
-            _ = try child.wait(io);
-            job.code = openfugu.cli.exit_sigint;
-            return std.fmt.allocPrint(std.heap.page_allocator, "canceled\n", .{});
-        }
-        const timeout: std.Io.Timeout = .{ .duration = .{
-            .raw = std.Io.Duration.fromMilliseconds(100),
-            .clock = .awake,
-        } };
-        while (multi_reader.fill(64, timeout)) |_| {} else |err| {
-            switch (err) {
-                error.Timeout => continue,
-                error.EndOfStream => break :read_loop,
-                else => |e| return e,
-            }
-        }
+    var stdout_thread = try std.Thread.spawn(.{}, drainPipe, .{ job, child.stdout.? });
+    var stderr_thread = try std.Thread.spawn(.{}, drainPipe, .{ job, child.stderr.? });
+    defer {
+        stdout_thread.join();
+        stderr_thread.join();
+        if (child.stdout) |file| file.close(io);
+        if (child.stderr) |file| file.close(io);
     }
 
-    try multi_reader.checkAnyError();
-    const term = try child.wait(io);
+    const term = if (builtin.os.tag == .linux) linux_wait: {
+        while (true) {
+            if (job.cancel_requested.load(.acquire)) {
+                _ = signalChildGroup(child, .TERM);
+                try io.sleep(std.Io.Duration.fromMilliseconds(250), .awake);
+                _ = signalChildGroup(child, .KILL);
+                _ = try child.wait(io);
+                job.code = openfugu.cli.exit_sigint;
+                return std.fmt.allocPrint(std.heap.page_allocator, "canceled\n", .{});
+            }
+            if (try waitNoHang(child.id.?)) |done_term| {
+                child.id = null;
+                break :linux_wait done_term;
+            }
+            try io.sleep(std.Io.Duration.fromMilliseconds(100), .awake);
+        }
+    } else try child.wait(io);
+
     job.code = taskExitCode(term);
-    const stdout = try multi_reader.toOwnedSlice(0);
-    defer std.heap.page_allocator.free(stdout);
-    const stderr = try multi_reader.toOwnedSlice(1);
-    defer std.heap.page_allocator.free(stderr);
-    if (stderr.len == 0) return std.heap.page_allocator.dupe(u8, stdout);
-    return std.fmt.allocPrint(std.heap.page_allocator, "{s}{s}", .{ stdout, stderr });
+    return (try job.copyLive(std.heap.page_allocator)) orelse try std.heap.page_allocator.dupe(u8, "");
+}
+
+fn drainPipe(job: *TaskJob, file: std.Io.File) void {
+    var buf: [4096]u8 = undefined;
+    while (true) {
+        const n = std.posix.read(file.handle, &buf) catch return;
+        if (n == 0) return;
+        job.appendLive(buf[0..n]) catch return;
+    }
+}
+
+fn waitNoHang(pid: std.posix.pid_t) !?std.process.Child.Term {
+    var status: u32 = 0;
+    const waited: isize = @bitCast(std.os.linux.waitpid(pid, &status, std.os.linux.W.NOHANG));
+    if (waited == 0) return null;
+    if (waited < 0) return error.Unexpected;
+    if (std.os.linux.W.IFEXITED(status)) return .{ .exited = std.os.linux.W.EXITSTATUS(status) };
+    if (std.os.linux.W.IFSIGNALED(status)) return .{ .signal = std.os.linux.W.TERMSIG(status) };
+    return .{ .unknown = status };
 }
 
 fn signalChildGroup(child: std.process.Child, sig: std.posix.SIG) bool {
