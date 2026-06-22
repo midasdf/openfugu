@@ -284,6 +284,7 @@ test "interactive input classifies prompt lines" {
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.dry_run, openfugu.cli.interactiveInput(":dry-run\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.apply, openfugu.cli.interactiveInput(":apply\n"));
     try std.testing.expectEqualStrings("fix failing tests", openfugu.cli.interactiveInput(":route fix failing tests\n").route);
+    try std.testing.expectEqualStrings("run-123", openfugu.cli.interactiveInput(":replay run-123\n").replay);
     try std.testing.expectEqualStrings("codex", openfugu.cli.interactiveInput(":agent codex\n").agent);
     try std.testing.expectEqualStrings("race", openfugu.cli.interactiveInput(":mode race\n").mode);
     try std.testing.expectEqualStrings("subscription-agent", openfugu.cli.interactiveInput(":planner subscription-agent\n").planner);

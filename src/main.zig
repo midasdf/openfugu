@@ -74,6 +74,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :status  show current routing state
                     \\  :reset-routing reset routing to defaults
                     \\  :route   preview routing without running
+                    \\  :replay  show ledger replay for run id
                     \\  :doctor  show agent health
                     \\  :agents  list runnable agents
                     \\  :usage   show routing ledger summary
@@ -138,6 +139,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .route => |task| {
                 try runRoutePreview(init, &last_output, task, agent_filter, mode, planner);
+                try writer.interface.writeAll(last_output);
+            },
+            .replay => |run_id| {
+                try runReplay(init, &last_output, run_id);
                 try writer.interface.writeAll(last_output);
             },
             .agent => |value| {
@@ -224,6 +229,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":status",
         ":reset-routing",
         ":route ",
+        ":replay ",
         ":doctor",
         ":agents",
         ":usage",
@@ -459,6 +465,7 @@ fn handleInteractiveLine(
             \\  :status  show current routing state
             \\  :reset-routing reset routing to defaults
             \\  :route   preview routing without running
+            \\  :replay  show ledger replay for run id
             \\  :doctor  show agent health
             \\  :agents  list runnable agents
             \\  :usage   show routing ledger summary
@@ -501,6 +508,7 @@ fn handleInteractiveLine(
             try replaceLog(init.gpa, last_output, "apply=true\n");
         },
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
+        .replay => |run_id| try runReplay(init, last_output, run_id),
         .agent => |value| {
             if (!validAgent(value)) {
                 try replaceLog(init.gpa, last_output, "invalid agent\n");
@@ -653,6 +661,13 @@ fn runLocalVerify(init: std.process.Init, log: *[]u8) !void {
     const text = try out.toOwnedSlice(init.gpa);
     defer init.gpa.free(text);
     try appendLog(init.gpa, log, ":verify", text);
+}
+
+fn runReplay(init: std.process.Init, log: *[]u8, run_id: []const u8) !void {
+    var args = [_][]const u8{ "openfugu", "replay", run_id };
+    const text = try runCommandText(init, &args);
+    defer init.gpa.free(text);
+    try appendLog(init.gpa, log, run_id, text);
 }
 
 fn runRoutePreview(
