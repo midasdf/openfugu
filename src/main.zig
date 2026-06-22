@@ -177,6 +177,24 @@ fn rawRepl(init: std.process.Init) !u8 {
     defer input.deinit();
     input.setPlaceholder("type a task or :help");
     input.setCharLimit(4096);
+    input.setSuggestions(&.{
+        ":help",
+        ":doctor",
+        ":agents",
+        ":dry-run",
+        ":agent auto",
+        ":agent claude",
+        ":agent codex",
+        ":agent agy",
+        ":mode auto",
+        ":mode single",
+        ":mode race",
+        ":mode ensemble",
+        ":planner heuristic",
+        ":planner subscription-agent",
+        ":clear",
+        ":quit",
+    });
 
     var last_output = try init.gpa.dupe(u8, "Type a task and press Enter.\n");
     defer init.gpa.free(last_output);
