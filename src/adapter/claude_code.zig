@@ -35,7 +35,7 @@ pub fn buildInvocation(allocator: std.mem.Allocator, kind: adapter.ProfileKind, 
     const permission = claudePermissionMode(task.role);
     return adapter.ownInvocation(allocator, .{
         .executable = "claude",
-        .argv = &.{ "claude", "-p", task.instruction, "--output-format", "stream-json", "--permission-mode", permission },
+        .argv = &.{ "claude", "-p", task.instruction, "--output-format", "stream-json", "--verbose", "--permission-mode", permission },
         .cwd = task.worktree_path,
         .stdin = task.context,
         .output_format = .jsonl,

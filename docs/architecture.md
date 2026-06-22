@@ -16,4 +16,5 @@ planner.
 
 For task execution, `--planner subscription-agent` first asks a subscription CLI
 for a small routing hint. The hint only affects local scoring after validation;
-invalid hints are ignored.
+invalid hints are ignored. Routing scores include the task kind, optional
+router preference, and prior accepted/failed outcomes from the local ledger.

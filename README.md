@@ -49,4 +49,7 @@ The normal test suite uses fake agents and temporary git repositories only.
 
 Task execution uses local scoring by default. Passing `--planner
 subscription-agent` asks a subscription CLI to route the task first, then falls
-back to local scoring if the router output is invalid.
+back to local scoring if the router output is invalid. Add
+`--explain-routing` to print the route, preferred agent, score, and selected
+agent. Local scoring also uses prior accepted/failed outcomes from the local
+ledger.

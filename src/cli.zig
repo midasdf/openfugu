@@ -31,6 +31,12 @@ const RoutingCandidate = struct {
     score: i64,
 };
 
+const LedgerStats = struct {
+    calls: u64 = 0,
+    successes: u64 = 0,
+    failures: u64 = 0,
+};
+
 pub const exit_ok: u8 = 0;
 pub const exit_usage: u8 = 2;
 pub const exit_no_agent: u8 = 3;
@@ -131,7 +137,7 @@ pub fn runWithProbeSpecsInRepo(
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
     if (try taskText(args)) |task| {
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"));
     }
     return run(allocator, args);
 }
@@ -192,7 +198,8 @@ fn taskText(args: []const []const u8) !?[]const u8 {
         if (std.mem.eql(u8, arg, "--subscription-only") or
             std.mem.eql(u8, arg, "--no-apply") or
             std.mem.eql(u8, arg, "--require-model-review") or
-            std.mem.eql(u8, arg, "--reject-model-review")) continue;
+            std.mem.eql(u8, arg, "--reject-model-review") or
+            std.mem.eql(u8, arg, "--explain-routing")) continue;
         if (takesValue(arg)) {
             i += 1;
             if (i >= args.len) return error.InvalidArgs;
@@ -343,6 +350,7 @@ fn runFirstRunnableSpec(
     planner_backend: ?[]const u8,
     review: model_review.Review,
     cooldown_filter: ?[]const u8,
+    explain_routing: bool,
 ) !Result {
     try std.Io.Dir.cwd().createDirPath(io, worktree_root);
     var candidates = try allocator.alloc(RoutingCandidate, specs.len);
@@ -377,11 +385,17 @@ fn runFirstRunnableSpec(
         }
     }
     for (candidates[0..candidate_count]) |*candidate| {
+        const ledger_path = try runLedgerPath(allocator, worktree_root);
+        defer allocator.free(ledger_path);
+        const stats = try ledgerStatsForAgent(allocator, io, ledger_path, candidate.report.name);
         candidate.score = policy.scoreAgent(.{
             .id = candidate.report.name,
             .profile_name = candidate.spec.profile.name,
             .kind = kind,
             .preferred_agent = preferred_agent,
+            .calls = stats.calls,
+            .successes = stats.successes,
+            .failures = stats.failures,
         });
     }
     sortRoutingCandidates(candidates[0..candidate_count]);
@@ -418,6 +432,21 @@ fn runFirstRunnableSpec(
 
         const code = if (summary.accepted and (no_apply or (summary.applied and summary.reverified))) exit_ok else exit_verify;
         if (code != exit_ok and continuesAfterFailure(mode, depth)) continue;
+        if (explain_routing) {
+            return .{
+                .code = code,
+                .text = try std.fmt.allocPrint(allocator, "router={s} route={s} preferred={s} score={d} agent={s} accepted={} applied={} reverified={}\n", .{
+                    router_name,
+                    @tagName(kind),
+                    @tagName(preferred_agent),
+                    candidate.score,
+                    candidate.report.name,
+                    summary.accepted,
+                    summary.applied,
+                    summary.reverified,
+                }),
+            };
+        }
         return .{
             .code = code,
             .text = try std.fmt.allocPrint(allocator, "router={s} route={s} agent={s} accepted={} applied={} reverified={}\n", .{
@@ -571,6 +600,25 @@ fn continuesAfterFailure(mode: ?[]const u8, depth: ?[]const u8) bool {
 fn runLedgerPath(allocator: std.mem.Allocator, worktree_root: []const u8) ![]u8 {
     const parent = std.fs.path.dirname(worktree_root) orelse ".";
     return std.fs.path.join(allocator, &.{ parent, "ledger.jsonl" });
+}
+
+fn ledgerStatsForAgent(allocator: std.mem.Allocator, io: std.Io, path: []const u8, agent: []const u8) !LedgerStats {
+    const text = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(1024 * 1024)) catch return .{};
+    defer allocator.free(text);
+    const needle = try std.fmt.allocPrint(allocator, "\"agent\":\"{s}\"", .{agent});
+    defer allocator.free(needle);
+    var out: LedgerStats = .{};
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        if (std.mem.indexOf(u8, line, needle) == null) continue;
+        out.calls += 1;
+        if (std.mem.indexOf(u8, line, "\"accepted\":true") != null) {
+            out.successes += 1;
+        } else {
+            out.failures += 1;
+        }
+    }
+    return out;
 }
 
 fn invocationForSpec(allocator: std.mem.Allocator, spec: probe.DetectSpec, task_text_value: []const u8) !adapter.OwnedInvocation {

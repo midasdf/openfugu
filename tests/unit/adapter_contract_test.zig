@@ -20,6 +20,7 @@ test "official adapters build non-interactive invocations by role" {
     try containsArg(claude.value.argv, "-p");
     try containsArg(claude.value.argv, "--output-format");
     try containsArg(claude.value.argv, "stream-json");
+    try containsArg(claude.value.argv, "--verbose");
     try containsArg(claude.value.argv, "acceptEdits");
     try noDangerousArg(claude.value.argv);
 
