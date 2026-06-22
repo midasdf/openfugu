@@ -123,7 +123,7 @@ pub fn runWithProbeSpecsInRepo(
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
     if (try taskText(args)) |task| {
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"));
     }
     return run(allocator, args);
 }
@@ -327,6 +327,7 @@ fn runFirstRunnableSpec(
     no_apply: bool,
     agents_filter: ?[]const u8,
     mode: ?[]const u8,
+    depth: ?[]const u8,
 ) !Result {
     try std.Io.Dir.cwd().createDirPath(io, worktree_root);
     var saw_runnable = false;
@@ -366,7 +367,7 @@ fn runFirstRunnableSpec(
         });
 
         const code = if (summary.accepted and (no_apply or (summary.applied and summary.reverified))) exit_ok else exit_verify;
-        if (code != exit_ok and continuesAfterFailure(mode)) continue;
+        if (code != exit_ok and continuesAfterFailure(mode, depth)) continue;
         return .{
             .code = code,
             .text = try std.fmt.allocPrint(allocator, "agent={s} accepted={} applied={} reverified={}\n", .{
@@ -414,7 +415,10 @@ fn agentAllowed(filter: ?[]const u8, name: []const u8) bool {
     return false;
 }
 
-fn continuesAfterFailure(mode: ?[]const u8) bool {
+fn continuesAfterFailure(mode: ?[]const u8, depth: ?[]const u8) bool {
+    if (depth) |value| {
+        if (std.mem.eql(u8, value, "0")) return false;
+    }
     const value = mode orelse return false;
     return std.mem.eql(u8, value, "race") or std.mem.eql(u8, value, "ensemble");
 }
