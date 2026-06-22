@@ -298,7 +298,7 @@ test "tui render uses viewport and command help" {
     const screen = try openfugu.tui.render(std.testing.allocator, "ready", "", "line1\nline2\nline3\n");
     defer std.testing.allocator.free(screen);
 
-    try std.testing.expect(std.mem.indexOf(u8, screen, ":doctor") != null);
+    try std.testing.expect(std.mem.indexOf(u8, screen, ":help commands") != null);
     try std.testing.expect(std.mem.indexOf(u8, screen, "line3") != null);
 }
 

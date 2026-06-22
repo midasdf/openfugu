@@ -50,7 +50,7 @@ pub fn renderDashboardSized(allocator: std.mem.Allocator, dashboard: Dashboard, 
         \\> {s}
         \\
         \\{s}
-    , .{ dashboard.status, side, output_view, dashboard.input, ":help  :status  :doctor  :agents  :dry-run  :apply  :clear  :quit" });
+    , .{ dashboard.status, side, output_view, dashboard.input, "Tab suggest  Up/Down history  :help commands  Esc quit" });
     defer allocator.free(body);
 
     const frame = (zz.Style{})
