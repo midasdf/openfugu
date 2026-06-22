@@ -191,12 +191,25 @@ fn rawRepl(init: std.process.Init) !u8 {
     defer init.gpa.free(mode);
     var planner = try init.gpa.dupe(u8, "heuristic");
     defer init.gpa.free(planner);
+    // ponytail: one foreground task; add a queue/cancel path when parallel TUI work matters.
+    var job: ?*TaskJob = null;
+    defer if (job) |running_job| finishJob(init.gpa, running_job);
 
     while (true) {
-        try drawRaw(init, &term, input.getValue(), last_output, agents, history, dry_run, agent_filter, mode, planner, false);
+        if (job) |running_job| {
+            if (running_job.done.load(.acquire)) {
+                finishCompletedJob(init.gpa, running_job, &last_output) catch |err| {
+                    init.gpa.free(last_output);
+                    last_output = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+                };
+                job = null;
+            }
+        }
+
+        try drawRaw(init, &term, input.getValue(), last_output, agents, history, dry_run, agent_filter, mode, planner, job != null);
 
         var input_buf: [256]u8 = undefined;
-        const read = try term.readInput(&input_buf, -1);
+        const read = try term.readInput(&input_buf, if (job == null) -1 else 100);
         if (read == 0) continue;
         const events = try zz.input.keyboard.parseAll(init.gpa, input_buf[0..read]);
         defer init.gpa.free(events);
@@ -210,7 +223,7 @@ fn rawRepl(init: std.process.Init) !u8 {
                     const line = try init.gpa.dupe(u8, input.getValue());
                     defer init.gpa.free(line);
                     try input.setValue("");
-                    const should_quit = try handleInteractiveLine(init, line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term);
+                    const should_quit = try handleInteractiveLine(init, line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
                     if (should_quit) return openfugu.cli.exit_ok;
                 },
                 else => input.handleKey(key),
@@ -218,6 +231,23 @@ fn rawRepl(init: std.process.Init) !u8 {
         }
     }
 }
+
+const TaskJob = struct {
+    thread: std.Thread,
+    done: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+    argv: [][]const u8,
+    label: []u8,
+    text: ?[]u8 = null,
+    code: u8 = openfugu.cli.exit_planner,
+
+    fn deinit(self: *TaskJob, allocator: std.mem.Allocator) void {
+        for (self.argv) |arg| allocator.free(arg);
+        allocator.free(self.argv);
+        allocator.free(self.label);
+        if (self.text) |text| std.heap.page_allocator.free(text);
+        allocator.destroy(self);
+    }
+};
 
 fn drawRaw(
     init: std.process.Init,
@@ -267,6 +297,7 @@ fn handleInteractiveLine(
     mode: *[]u8,
     planner: *[]u8,
     term: *zz.Terminal,
+    job: *?*TaskJob,
 ) !bool {
     switch (openfugu.cli.interactiveInput(line)) {
         .empty => return false,
@@ -326,6 +357,10 @@ fn handleInteractiveLine(
             try replaceLog(init.gpa, last_output, "planner updated\n");
         },
         .task => |task| {
+            if (job.* != null) {
+                try replaceLog(init.gpa, last_output, "task already running\n");
+                return false;
+            }
             try appendHistory(init.gpa, history, task);
             try drawRaw(init, term, task, last_output.*, agents.*, history.*, dry_run.*, agent_filter.*, mode.*, planner.*, true);
             var args = std.array_list.Managed([]const u8).init(init.gpa);
@@ -346,16 +381,66 @@ fn handleInteractiveLine(
                 try args.append(planner.*);
             }
             try args.append(task);
-            var result = openfugu.cli.runWithIo(init.gpa, init.io, args.items) catch |err| {
-                init.gpa.free(last_output.*);
-                last_output.* = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
-                return false;
-            };
-            defer result.deinit(init.gpa);
-            try appendLog(init.gpa, last_output, task, result.text);
+            job.* = try startTaskJob(init.gpa, init.io, args.items, task);
+            try replaceLog(init.gpa, last_output, "task running\n");
         },
     }
     return false;
+}
+
+fn startTaskJob(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8, label: []const u8) !*TaskJob {
+    const job = try allocator.create(TaskJob);
+    errdefer allocator.destroy(job);
+    const argv_copy = try dupArgv(allocator, argv);
+    errdefer freeArgv(allocator, argv_copy);
+    const label_copy = try allocator.dupe(u8, label);
+    errdefer allocator.free(label_copy);
+    job.* = .{
+        .thread = undefined,
+        .argv = argv_copy,
+        .label = label_copy,
+    };
+    job.thread = try std.Thread.spawn(.{}, taskWorker, .{ job, io });
+    return job;
+}
+
+fn taskWorker(job: *TaskJob, io: std.Io) void {
+    const result = openfugu.cli.runWithIo(std.heap.page_allocator, io, job.argv) catch |err| {
+        job.text = std.fmt.allocPrint(std.heap.page_allocator, "error: {s}\n", .{@errorName(err)}) catch null;
+        job.done.store(true, .release);
+        return;
+    };
+    job.code = result.code;
+    job.text = result.text;
+    job.done.store(true, .release);
+}
+
+fn finishCompletedJob(allocator: std.mem.Allocator, job: *TaskJob, last_output: *[]u8) !void {
+    job.thread.join();
+    try appendLog(allocator, last_output, job.label, job.text orelse "error: out of memory\n");
+    job.deinit(allocator);
+}
+
+fn finishJob(allocator: std.mem.Allocator, job: *TaskJob) void {
+    job.thread.join();
+    job.deinit(allocator);
+}
+
+fn dupArgv(allocator: std.mem.Allocator, argv: []const []const u8) ![][]const u8 {
+    const copy = try allocator.alloc([]const u8, argv.len);
+    errdefer allocator.free(copy);
+    var copied: usize = 0;
+    errdefer for (copy[0..copied]) |arg| allocator.free(arg);
+    for (argv, 0..) |arg, index| {
+        copy[index] = try allocator.dupe(u8, arg);
+        copied += 1;
+    }
+    return copy;
+}
+
+fn freeArgv(allocator: std.mem.Allocator, argv: [][]const u8) void {
+    for (argv) |arg| allocator.free(arg);
+    allocator.free(argv);
 }
 
 fn runInteractiveCommand(init: std.process.Init, log: *[]u8, args: []const []const u8, label: []const u8) !void {
