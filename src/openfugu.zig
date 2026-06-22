@@ -4,6 +4,7 @@ pub const adapter = @import("adapter/adapter.zig");
 pub const antigravity = @import("adapter/antigravity.zig");
 pub const claude_code = @import("adapter/claude_code.zig");
 pub const codex = @import("adapter/codex.zig");
+pub const policy = @import("conductor/policy.zig");
 pub const environment = @import("proc/environment.zig");
 pub const conductor = @import("conductor/loop.zig");
 pub const context = @import("context/broker.zig");
@@ -17,7 +18,9 @@ pub const session = @import("proc/session.zig");
 pub const signal = @import("proc/signal.zig");
 pub const subscription_agent = @import("planner/subscription_agent.zig");
 pub const validate = @import("planner/validate.zig");
+pub const model_review = @import("verify/model_review.zig");
 pub const verify = @import("verify/commands.zig");
+pub const verdict = @import("verify/verdict.zig");
 pub const workspace = @import("workspace/worktree.zig");
 pub const fake = @import("adapter/fake.zig");
 
@@ -28,6 +31,7 @@ test {
     _ = antigravity;
     _ = claude_code;
     _ = codex;
+    _ = policy;
     _ = environment;
     _ = conductor;
     _ = context;
@@ -41,7 +45,9 @@ test {
     _ = signal;
     _ = subscription_agent;
     _ = validate;
+    _ = model_review;
     _ = verify;
+    _ = verdict;
     _ = workspace;
     _ = fake;
 }
