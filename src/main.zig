@@ -69,6 +69,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :doctor  show agent health
                     \\  :agents  list runnable agents
                     \\  :dry-run toggle dry-run mode
+                    \\  :apply   return to apply mode
                     \\  :agent   set agent: auto, claude, codex, agy
                     \\  :mode    set mode: auto, single, race, ensemble
                     \\  :planner set planner: heuristic, subscription-agent
@@ -95,6 +96,11 @@ fn repl(init: std.process.Init) !u8 {
                 dry_run = !dry_run;
                 init.gpa.free(last_output);
                 last_output = try std.fmt.allocPrint(init.gpa, "dry-run={}\n", .{dry_run});
+                try writer.interface.writeAll(last_output);
+            },
+            .apply => {
+                dry_run = false;
+                try replaceLog(init.gpa, &last_output, "apply=true\n");
                 try writer.interface.writeAll(last_output);
             },
             .agent => |value| {
@@ -182,6 +188,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":doctor",
         ":agents",
         ":dry-run",
+        ":apply",
         ":agent auto",
         ":agent claude",
         ":agent codex",
@@ -358,6 +365,7 @@ fn handleInteractiveLine(
             \\  :doctor  show agent health
             \\  :agents  list runnable agents
             \\  :dry-run toggle dry-run mode
+            \\  :apply   return to apply mode
             \\  :agent   set agent: auto, claude, codex, agy
             \\  :mode    set mode: auto, single, race, ensemble
             \\  :planner set planner: heuristic, subscription-agent
@@ -378,6 +386,10 @@ fn handleInteractiveLine(
             dry_run.* = !dry_run.*;
             init.gpa.free(last_output.*);
             last_output.* = try std.fmt.allocPrint(init.gpa, "dry-run={}\n", .{dry_run.*});
+        },
+        .apply => {
+            dry_run.* = false;
+            try replaceLog(init.gpa, last_output, "apply=true\n");
         },
         .agent => |value| {
             if (!validAgent(value)) {

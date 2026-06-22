@@ -197,6 +197,7 @@ pub const InteractiveInput = union(enum) {
     agents,
     help,
     dry_run,
+    apply,
     agent: []const u8,
     mode: []const u8,
     planner: []const u8,
@@ -212,6 +213,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":agents")) return .agents;
     if (std.mem.eql(u8, task, ":help")) return .help;
     if (std.mem.eql(u8, task, ":dry-run")) return .dry_run;
+    if (std.mem.eql(u8, task, ":apply")) return .apply;
     if (commandValue(task, ":agent")) |value| return .{ .agent = value };
     if (commandValue(task, ":mode")) |value| return .{ .mode = value };
     if (commandValue(task, ":planner")) |value| return .{ .planner = value };

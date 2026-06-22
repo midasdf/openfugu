@@ -87,5 +87,5 @@ It uses raw-key input on an interactive terminal, so cursor movement and common
 line-editing shortcuts work inside the fullscreen dashboard. Type a task to
 route and execute it, press Tab to accept command suggestions, use Up/Down for
 task history, or type `:quit` to exit.
-The TUI also accepts `:doctor`, `:agents`, `:dry-run`, `:agent <name>`,
-`:mode <name>`, `:planner <name>`, and `:clear`.
+The TUI also accepts `:doctor`, `:agents`, `:dry-run`, `:apply`,
+`:agent <name>`, `:mode <name>`, `:planner <name>`, and `:clear`.
