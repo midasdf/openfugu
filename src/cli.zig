@@ -29,6 +29,7 @@ const RoutingCandidate = struct {
     spec: probe.DetectSpec,
     report: probe.AgentReport,
     score: i64,
+    stats: LedgerStats = .{},
 };
 
 const LedgerStats = struct {
@@ -469,6 +470,7 @@ fn runFirstRunnableSpec(
         const ledger_path = try runLedgerPath(allocator, worktree_root);
         defer allocator.free(ledger_path);
         const stats = try ledgerStatsForAgent(allocator, io, ledger_path, candidate.report.name);
+        candidate.stats = stats;
         candidate.score = policy.scoreAgent(.{
             .id = candidate.report.name,
             .profile_name = candidate.spec.profile.name,
@@ -503,7 +505,14 @@ fn runFirstRunnableSpec(
         defer allocator.free(header);
         try out.appendSlice(allocator, header);
         for (candidates[0..candidate_count]) |candidate| {
-            const line = try std.fmt.allocPrint(allocator, "candidate agent={s} score={d}\n", .{ candidate.report.name, candidate.score });
+            const line = try std.fmt.allocPrint(allocator, "candidate agent={s} score={d} profile={s} calls={d} successes={d} failures={d}\n", .{
+                candidate.report.name,
+                candidate.score,
+                candidate.spec.profile.name,
+                candidate.stats.calls,
+                candidate.stats.successes,
+                candidate.stats.failures,
+            });
             defer allocator.free(line);
             try out.appendSlice(allocator, line);
         }

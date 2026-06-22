@@ -478,6 +478,8 @@ test "task cli route-only previews routing without executing agent" {
     try std.testing.expectEqual(openfugu.cli.exit_ok, result.code);
     try std.testing.expect(std.mem.indexOf(u8, result.text, "route=test_fix") != null);
     try std.testing.expect(std.mem.indexOf(u8, result.text, "agent=codex") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "profile=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "calls=0 successes=0 failures=0") != null);
     try std.testing.expect(std.mem.indexOf(u8, result.text, "execute=false") != null);
     try std.testing.expectError(error.FileNotFound, tmp.dir.access(std.testing.io, "repo/should-not-run.txt", .{}));
 }
