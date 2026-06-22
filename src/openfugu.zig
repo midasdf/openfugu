@@ -32,6 +32,7 @@ pub const model_review = @import("verify/model_review.zig");
 pub const verify = @import("verify/commands.zig");
 pub const verdict = @import("verify/verdict.zig");
 pub const workspace = @import("workspace/worktree.zig");
+pub const patch = @import("workspace/patch.zig");
 pub const fake = @import("adapter/fake.zig");
 
 test {
@@ -69,5 +70,6 @@ test {
     _ = verify;
     _ = verdict;
     _ = workspace;
+    _ = patch;
     _ = fake;
 }

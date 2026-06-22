@@ -82,6 +82,43 @@ test "workspace cleanup removes candidate worktree and branch" {
     try std.testing.expectEqualStrings("", std.mem.trim(u8, branch.stdout_tail, " \n\r\t"));
 }
 
+test "workspace patch captures candidate diff from git" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+
+    const root = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "repo" });
+    defer std.testing.allocator.free(root);
+    const worktrees = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "worktrees" });
+    defer std.testing.allocator.free(worktrees);
+
+    try tmp.dir.createDirPath(std.testing.io, "repo");
+    try tmp.dir.createDirPath(std.testing.io, "worktrees");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "repo/answer.txt", .data = "bad\n" });
+    try git(root, &.{ "init", "-b", "main" });
+    try git(root, &.{ "config", "user.email", "openfugu@example.invalid" });
+    try git(root, &.{ "config", "user.name", "OpenFugu Test" });
+    try git(root, &.{ "add", "answer.txt" });
+    try git(root, &.{ "commit", "-m", "initial" });
+
+    var snap = try openfugu.workspace.snapshot(std.testing.allocator, std.testing.io, root);
+    defer snap.deinit(std.testing.allocator);
+    var candidate = try openfugu.workspace.createCandidate(std.testing.allocator, std.testing.io, snap, worktrees, "run3", "cand3", "fake");
+    defer candidate.deinit(std.testing.allocator);
+
+    try openfugu.workspace.writeFile(std.testing.allocator, std.testing.io, candidate.worktree_path, "answer.txt", "good\n");
+    try openfugu.workspace.commitAll(std.testing.allocator, std.testing.io, &candidate, "candidate");
+
+    var patch = try openfugu.patch.capture(std.testing.allocator, std.testing.io, candidate.worktree_path, snap.head, candidate.commit.?);
+    defer patch.deinit(std.testing.allocator);
+
+    try std.testing.expect(patch.has_changes);
+    try std.testing.expect(std.mem.indexOf(u8, patch.text, "-bad") != null);
+    try std.testing.expect(std.mem.indexOf(u8, patch.text, "+good") != null);
+}
+
 fn git(cwd: []const u8, args: []const []const u8) !void {
     var result = try gitOutput(cwd, args);
     defer result.deinit(std.testing.allocator);
