@@ -339,6 +339,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         for (input_history.items) |item| init.gpa.free(item);
         input_history.deinit();
     }
+    try loadInputHistory(init, &input_history);
     var last_task: ?[]u8 = null;
     defer if (last_task) |task| init.gpa.free(task);
     var history_index: ?usize = null;
@@ -433,6 +434,7 @@ fn rawRepl(init: std.process.Init) !u8 {
                         .clear_history => {
                             for (input_history.items) |item| init.gpa.free(item);
                             input_history.clearRetainingCapacity();
+                            try saveInputHistory(init, &input_history);
                             if (last_task) |task| init.gpa.free(task);
                             last_task = null;
                         },
@@ -442,13 +444,18 @@ fn rawRepl(init: std.process.Init) !u8 {
                                 continue;
                             };
                             try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n")));
+                            try saveInputHistory(init, &input_history);
                         },
                         .task => |task| {
                             if (last_task) |old| init.gpa.free(old);
                             last_task = try init.gpa.dupe(u8, task);
                             try input_history.append(try init.gpa.dupe(u8, task));
+                            try saveInputHistory(init, &input_history);
                         },
-                        else => try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n"))),
+                        else => {
+                            try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n")));
+                            try saveInputHistory(init, &input_history);
+                        },
                     }
                     const should_quit = try handleInteractiveLine(init, rerun_task orelse line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
                     output_offset = null;
@@ -1095,6 +1102,28 @@ fn runCommandText(init: std.process.Init, args: []const []const u8) ![]u8 {
     };
     defer result.deinit(init.gpa);
     return init.gpa.dupe(u8, result.text);
+}
+
+fn loadInputHistory(init: std.process.Init, history: *std.array_list.Managed([]u8)) !void {
+    const text = std.Io.Dir.cwd().readFileAlloc(init.io, ".openfugu/tui-history", init.gpa, .limited(64 * 1024)) catch return;
+    defer init.gpa.free(text);
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        if (trimmed.len != 0) try history.append(try init.gpa.dupe(u8, trimmed));
+    }
+}
+
+fn saveInputHistory(init: std.process.Init, history: *const std.array_list.Managed([]u8)) !void {
+    try std.Io.Dir.cwd().createDirPath(init.io, ".openfugu");
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(init.gpa);
+    const start = history.items.len -| 200;
+    for (history.items[start..]) |item| {
+        try out.appendSlice(init.gpa, item);
+        try out.append(init.gpa, '\n');
+    }
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = ".openfugu/tui-history", .data = out.items });
 }
 
 fn saveOutput(init: std.process.Init, log: *[]u8, path: []const u8) !void {

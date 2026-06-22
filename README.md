@@ -88,6 +88,7 @@ line-editing shortcuts work inside the fullscreen dashboard. Type a task to
 route and execute it, press Tab to accept command suggestions, use Up/Down for
 input history, press PageUp/PageDown to page output, use Home/End to jump to
 the output top or bottom, or type `:quit` to exit.
+Input history is stored in `.openfugu/tui-history`.
 The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:ledger`,
 `:where`, `:worktrees`, `:git`, `:diff`, `:patch`, `:verify`, `:cancel`,
 `:rerun`, `:save <file>`, `:run <command>`, `:cwd <path>`, `:dry-run`, `:no-apply`, `:apply`,
