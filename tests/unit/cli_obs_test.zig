@@ -273,6 +273,7 @@ test "interactive input classifies prompt lines" {
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.quit, openfugu.cli.interactiveInput(":quit\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.clear, openfugu.cli.interactiveInput(":clear\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.clear_history, openfugu.cli.interactiveInput(":clear-history\n"));
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.history, openfugu.cli.interactiveInput(":history\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.doctor, openfugu.cli.interactiveInput(":doctor\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.agents, openfugu.cli.interactiveInput(":agents\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.usage, openfugu.cli.interactiveInput(":usage\n"));

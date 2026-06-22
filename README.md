@@ -95,5 +95,5 @@ The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:ledger`,
 `:cd <path>`, `:cwd <path>`, `:load <file>`,
 `:open <file>`, `:dry-run`, `:no-apply`, `:apply`,
 `:agent <name>`, `:mode <name>`, `:planner <name>`, `:reset-routing`,
-`:plan <task>`, `:route <task>`, `:replay <run-id>`, `:clear`, and
+`:plan <task>`, `:route <task>`, `:replay <run-id>`, `:clear`, `:history`, and
 `:clear-history`.

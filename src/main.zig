@@ -69,6 +69,10 @@ fn repl(init: std.process.Init) !u8 {
                 try replaceLog(init.gpa, &last_output, "history cleared\n");
                 try writer.interface.writeAll(last_output);
             },
+            .history => {
+                try replaceLog(init.gpa, &last_output, history);
+                try writer.interface.writeAll(last_output);
+            },
             .help => {
                 try replaceLog(init.gpa, &last_output,
                     \\Commands:
@@ -107,6 +111,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :planner set planner: heuristic, subscription-agent
                     \\  :clear   clear this session
                     \\  :clear-history clear input and task history
+                    \\  :history show task history
                     \\  :quit    exit
                     \\
                     \\Keys: Up/Down input history, PageUp/PageDown output page, Home/End output top/bottom.
@@ -407,6 +412,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":planner subscription-agent",
         ":clear",
         ":clear-history",
+        ":history",
         ":quit",
     });
 
@@ -740,6 +746,7 @@ fn handleInteractiveLine(
             try replaceLog(init.gpa, history, "No tasks yet.\n");
             try replaceLog(init.gpa, last_output, "history cleared\n");
         },
+        .history => try replaceLog(init.gpa, last_output, history.*),
         .help => try replaceLog(init.gpa, last_output,
             \\Commands:
             \\  :status  show current routing state
@@ -777,6 +784,7 @@ fn handleInteractiveLine(
             \\  :planner set planner: heuristic, subscription-agent
             \\  :clear   clear this session
             \\  :clear-history clear input and task history
+            \\  :history show task history
             \\  :quit    exit
             \\
             \\Keys: Up/Down input history, PageUp/PageDown output page, Home/End output top/bottom.
