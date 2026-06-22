@@ -93,6 +93,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :diff    show git diff stat
                     \\  :patch   show git patch
                     \\  :verify  run local verification
+                    \\  :build   run build
                     \\  :test    run tests
                     \\  :cancel  cancel running task
                     \\  :rerun   rerun last task
@@ -169,6 +170,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .verify => {
                 try runLocalVerify(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .build => {
+                try runLocalBuild(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .test_ => {
@@ -406,6 +411,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":diff",
         ":patch",
         ":verify",
+        ":build",
         ":test",
         ":cancel",
         ":rerun",
@@ -790,6 +796,7 @@ fn handleInteractiveLine(
             \\  :diff    show git diff stat
             \\  :patch   show git patch
             \\  :verify  run local verification
+            \\  :build   run build
             \\  :test    run tests
             \\  :cancel  cancel running task
             \\  :rerun   rerun last task
@@ -835,6 +842,7 @@ fn handleInteractiveLine(
         .diff => try runGitDiff(init, last_output),
         .patch => try runGitPatch(init, last_output),
         .verify => try runLocalVerify(init, last_output),
+        .build => try runLocalBuild(init, last_output),
         .test_ => try runLocalTests(init, last_output),
         .cancel => {
             if (job.*) |running_job| {
@@ -1265,29 +1273,26 @@ fn runGitCommand(init: std.process.Init, log: *[]u8, label: []const u8, argv: []
 }
 
 fn runLocalVerify(init: std.process.Init, log: *[]u8) !void {
-    var verification = try openfugu.verify.run(init.gpa, init.io, ".", &.{
+    try runVerificationCommands(init, log, ":verify", &.{
         .{ .name = "build", .argv = &.{ "zig", "build" } },
         .{ .name = "test", .argv = &.{ "zig", "build", "test" } },
     });
-    defer verification.deinit(init.gpa);
+}
 
-    var out: std.ArrayList(u8) = .empty;
-    defer out.deinit(init.gpa);
-    try out.print(init.gpa, "passed={}\n", .{verification.passed});
-    for (verification.commands) |command| {
-        try out.print(init.gpa, "{s} exit={?}\n", .{ command.name, command.exit_code });
-        if (command.stdout_tail.len != 0) try out.appendSlice(init.gpa, command.stdout_tail);
-        if (command.stderr_tail.len != 0) try out.appendSlice(init.gpa, command.stderr_tail);
-    }
-    const text = try out.toOwnedSlice(init.gpa);
-    defer init.gpa.free(text);
-    try appendLog(init.gpa, log, ":verify", text);
+fn runLocalBuild(init: std.process.Init, log: *[]u8) !void {
+    try runVerificationCommands(init, log, ":build", &.{
+        .{ .name = "build", .argv = &.{ "zig", "build" } },
+    });
 }
 
 fn runLocalTests(init: std.process.Init, log: *[]u8) !void {
-    var verification = try openfugu.verify.run(init.gpa, init.io, ".", &.{
+    try runVerificationCommands(init, log, ":test", &.{
         .{ .name = "test", .argv = &.{ "zig", "build", "test" } },
     });
+}
+
+fn runVerificationCommands(init: std.process.Init, log: *[]u8, label: []const u8, commands: []const openfugu.verify.Command) !void {
+    var verification = try openfugu.verify.run(init.gpa, init.io, ".", commands);
     defer verification.deinit(init.gpa);
 
     var out: std.ArrayList(u8) = .empty;
@@ -1300,7 +1305,7 @@ fn runLocalTests(init: std.process.Init, log: *[]u8) !void {
     }
     const text = try out.toOwnedSlice(init.gpa);
     defer init.gpa.free(text);
-    try appendLog(init.gpa, log, ":test", text);
+    try appendLog(init.gpa, log, label, text);
 }
 
 fn runReplay(init: std.process.Init, log: *[]u8, run_id: []const u8) !void {
