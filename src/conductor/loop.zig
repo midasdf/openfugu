@@ -56,6 +56,7 @@ pub fn runFakeSingle(allocator: std.mem.Allocator, req: FakeSingleRequest) !RunS
         req.agent_id,
     );
     defer candidate.deinit(allocator);
+    defer workspace.cleanupCandidate(allocator, req.io, req.repo_path, candidate) catch {};
 
     try workspace.writeFile(allocator, req.io, candidate.worktree_path, req.file_path, req.replacement);
     try workspace.commitAll(allocator, req.io, &candidate, "openfugu candidate");
@@ -100,6 +101,7 @@ pub fn runInvocationSingle(allocator: std.mem.Allocator, req: InvocationSingleRe
         req.agent_id,
     );
     defer candidate.deinit(allocator);
+    defer workspace.cleanupCandidate(allocator, req.io, req.repo_path, candidate) catch {};
 
     var worker = try runner.runInvocation(allocator, req.io, .{
         .executable = req.invocation.executable,

@@ -3,7 +3,7 @@ const openfugu = @import("openfugu");
 
 pub fn main(init: std.process.Init) !u8 {
     const args = try init.minimal.args.toSlice(init.arena.allocator());
-    var result = openfugu.cli.run(init.gpa, args) catch |err| switch (err) {
+    var result = openfugu.cli.runWithIo(init.gpa, init.io, args) catch |err| switch (err) {
         error.InvalidArgs => return openfugu.cli.exit_usage,
         else => return openfugu.cli.exit_planner,
     };

@@ -3,7 +3,7 @@ const openfugu = @import("openfugu");
 const test_options = @import("test_options");
 
 test "probe detects version subscription auth and runnable status" {
-    const report = try openfugu.probe.detect(std.testing.allocator, std.testing.io, .{
+    var report = try openfugu.probe.detect(std.testing.allocator, std.testing.io, .{
         .name = "claude",
         .version_argv = &.{ test_options.probe_cli_path, "--version" },
         .auth_argv = &.{ test_options.probe_cli_path, "auth" },
@@ -11,6 +11,7 @@ test "probe detects version subscription auth and runnable status" {
         .profile = openfugu.claude_code.profileForVersion("supported-1"),
         .subscription = openfugu.config.Config.default().subscription,
     });
+    defer report.deinit(std.testing.allocator);
 
     try std.testing.expect(report.exists);
     try std.testing.expectEqualStrings("supported-1", report.version);
@@ -22,7 +23,7 @@ test "probe detects version subscription auth and runnable status" {
 }
 
 test "probe rejects api key auth under subscription only" {
-    const report = try openfugu.probe.detect(std.testing.allocator, std.testing.io, .{
+    var report = try openfugu.probe.detect(std.testing.allocator, std.testing.io, .{
         .name = "claude",
         .version_argv = &.{ test_options.probe_cli_path, "--version" },
         .auth_argv = &.{ test_options.probe_cli_path, "apikey" },
@@ -30,6 +31,7 @@ test "probe rejects api key auth under subscription only" {
         .profile = openfugu.claude_code.profileForVersion("supported-1"),
         .subscription = openfugu.config.Config.default().subscription,
     });
+    defer report.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(openfugu.types.AuthKind.api_key, report.auth);
     try std.testing.expect(!report.runnable);

@@ -46,6 +46,10 @@ test "fake worker verifies applies and reverifies a git fixture" {
     const applied = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, applied_path, std.testing.allocator, .limited(1024));
     defer std.testing.allocator.free(applied);
     try std.testing.expectEqualStrings("good\n", applied);
+
+    var branch = try gitOutput(root, &.{ "branch", "--list", "openfugu-run1-cand1-fake" });
+    defer branch.deinit(std.testing.allocator);
+    try std.testing.expectEqualStrings("", std.mem.trim(u8, branch.stdout_tail, " \n\r\t"));
 }
 
 test "invocation worker runs in candidate worktree then verifies applies and reverifies" {
@@ -97,6 +101,10 @@ test "invocation worker runs in candidate worktree then verifies applies and rev
     const applied = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, applied_path, std.testing.allocator, .limited(1024));
     defer std.testing.allocator.free(applied);
     try std.testing.expectEqualStrings("good\n", applied);
+
+    var branch = try gitOutput(root, &.{ "branch", "--list", "openfugu-run-invoke-cand-invoke-fake" });
+    defer branch.deinit(std.testing.allocator);
+    try std.testing.expectEqualStrings("", std.mem.trim(u8, branch.stdout_tail, " \n\r\t"));
 }
 
 test "workspace cleanup removes candidate worktree and branch" {

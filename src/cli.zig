@@ -7,6 +7,9 @@ const probe = @import("adapter/probe.zig");
 const runner = @import("proc/runner.zig");
 const usage = @import("obs/usage.zig");
 const replay = @import("obs/replay.zig");
+const claude_code = @import("adapter/claude_code.zig");
+const codex = @import("adapter/codex.zig");
+const antigravity = @import("adapter/antigravity.zig");
 
 pub const exit_ok: u8 = 0;
 pub const exit_usage: u8 = 2;
@@ -38,6 +41,10 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !Result {
     return .{ .code = exit_ok, .text = try runAlloc(allocator, args) };
 }
 
+pub fn runWithIo(allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !Result {
+    return runWithProbeSpecs(allocator, io, args, defaultDetectSpecs());
+}
+
 pub fn runWithProbeSpecs(
     allocator: std.mem.Allocator,
     io: std.Io,
@@ -47,7 +54,7 @@ pub fn runWithProbeSpecs(
     if (args.len <= 1) return run(allocator, args);
     if (std.mem.eql(u8, args[1], "doctor") or std.mem.eql(u8, args[1], "agents")) {
         const reports = try collectReports(allocator, io, specs);
-        defer allocator.free(reports);
+        defer probe.freeReports(allocator, reports);
         if (std.mem.eql(u8, args[1], "doctor")) {
             return .{
                 .code = exit_ok,
@@ -125,6 +132,36 @@ fn defaultAgentReports() []const probe.AgentReport {
     };
 }
 
+fn defaultDetectSpecs() []const probe.DetectSpec {
+    const subscription = config.Config.default().subscription;
+    return &.{
+        .{
+            .name = "claude",
+            .version_argv = &.{ "claude", "--version" },
+            .auth_argv = &.{ "claude", "auth", "status" },
+            .supported_version = "supported-1",
+            .profile = claude_code.profileForVersion("supported-1"),
+            .subscription = subscription,
+        },
+        .{
+            .name = "codex",
+            .version_argv = &.{ "codex", "--version" },
+            .auth_argv = &.{ "codex", "login", "status" },
+            .supported_version = "supported-1",
+            .profile = codex.profileForVersion("supported-1"),
+            .subscription = subscription,
+        },
+        .{
+            .name = "agy",
+            .version_argv = &.{ "agy", "--version" },
+            .auth_argv = &.{ "agy", "auth", "status" },
+            .supported_version = "degraded-text",
+            .profile = antigravity.profileForVersion("degraded-text"),
+            .subscription = subscription,
+        },
+    };
+}
+
 fn renderAgents(allocator: std.mem.Allocator, agents: []const probe.AgentReport) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -150,7 +187,8 @@ fn collectReports(allocator: std.mem.Allocator, io: std.Io, specs: []const probe
 
 fn runFirstRunnableSpec(allocator: std.mem.Allocator, io: std.Io, specs: []const probe.DetectSpec) !Result {
     for (specs) |spec| {
-        const report_value = try probe.detect(allocator, io, spec);
+        var report_value = try probe.detect(allocator, io, spec);
+        defer report_value.deinit(allocator);
         if (!report_value.runnable) continue;
         const argv = spec.task_argv orelse continue;
         var raw = try runner.run(allocator, io, .{

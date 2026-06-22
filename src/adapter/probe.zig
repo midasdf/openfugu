@@ -11,10 +11,21 @@ pub const AgentReport = struct {
     runnable: bool,
     exists: bool = false,
     version: []const u8 = "",
+    owns_version: bool = false,
     non_interactive: bool = false,
     structured_output: bool = false,
     overage_known: bool = false,
+
+    pub fn deinit(self: *AgentReport, allocator: std.mem.Allocator) void {
+        if (self.owns_version) allocator.free(self.version);
+        self.* = undefined;
+    }
 };
+
+pub fn freeReports(allocator: std.mem.Allocator, reports: []AgentReport) void {
+    for (reports) |*agent| agent.deinit(allocator);
+    allocator.free(reports);
+}
 
 pub fn report(name: []const u8, profile: adapter.Profile, auth: types.AuthKind, is_runnable: bool) AgentReport {
     return .{
@@ -64,7 +75,6 @@ pub fn detect(allocator: std.mem.Allocator, io: std.Io, spec: DetectSpec) !Agent
         spec.profile.compatibility
     else
         .unknown;
-    const version_label = if (compatibility == .unknown) "unknown" else spec.supported_version;
     const effective_profile = adapter.Profile{
         .name = spec.profile.name,
         .compatibility = compatibility,
@@ -79,7 +89,8 @@ pub fn detect(allocator: std.mem.Allocator, io: std.Io, spec: DetectSpec) !Agent
         .auth = auth,
         .runnable = adapter.runnable(spec.subscription, effective_profile, auth),
         .exists = true,
-        .version = version_label,
+        .version = try allocator.dupe(u8, version),
+        .owns_version = true,
         .non_interactive = compatibility == .supported or compatibility == .degraded,
         .structured_output = spec.profile.capability.structured_output and compatibility == .supported,
         .overage_known = false,
