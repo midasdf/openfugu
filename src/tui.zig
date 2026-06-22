@@ -52,7 +52,7 @@ pub fn renderDashboardSized(allocator: std.mem.Allocator, dashboard: Dashboard, 
         \\> {s}
         \\
         \\{s}
-    , .{ dashboard.status, side, output_view, dashboard.input, "Tab suggest  Pg/Home output  :help commands  Esc quit" });
+    , .{ dashboard.status, side, output_view, dashboard.input, "Tab suggest  Pg/Home output  :help commands  Esc quit/cancel" });
     defer allocator.free(body);
 
     const frame = (zz.Style{})

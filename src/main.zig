@@ -346,7 +346,14 @@ fn rawRepl(init: std.process.Init) !u8 {
                 return openfugu.cli.exit_ok;
             }
             switch (key.key) {
-                .escape => return openfugu.cli.exit_ok,
+                .escape => {
+                    if (job) |running_job| {
+                        running_job.cancel_requested.store(true, .release);
+                        try replaceLog(init.gpa, &last_output, "cancel requested\n");
+                        continue;
+                    }
+                    return openfugu.cli.exit_ok;
+                },
                 .up => {
                     if (input_history.items.len > 0) {
                         const index = if (history_index) |current| current -| 1 else input_history.items.len - 1;
