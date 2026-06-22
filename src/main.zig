@@ -81,6 +81,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :agents  list runnable agents
                     \\  :usage   show routing ledger summary
                     \\  :where   show cwd and git branch
+                    \\  :worktrees show git worktrees
                     \\  :git     show git status
                     \\  :diff    show git diff stat
                     \\  :patch   show git patch
@@ -120,6 +121,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .where_ => {
                 try runWhere(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .worktrees => {
+                try runGitWorktrees(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .git => {
@@ -269,6 +274,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":agents",
         ":usage",
         ":where",
+        ":worktrees",
         ":git",
         ":diff",
         ":patch",
@@ -577,6 +583,7 @@ fn handleInteractiveLine(
             \\  :agents  list runnable agents
             \\  :usage   show routing ledger summary
             \\  :where   show cwd and git branch
+            \\  :worktrees show git worktrees
             \\  :git     show git status
             \\  :diff    show git diff stat
             \\  :patch   show git patch
@@ -606,6 +613,7 @@ fn handleInteractiveLine(
         },
         .usage => try runInteractiveCommand(init, last_output, &.{ "openfugu", "usage" }, ":usage"),
         .where_ => try runWhere(init, last_output),
+        .worktrees => try runGitWorktrees(init, last_output),
         .git => try runGitStatus(init, last_output),
         .diff => try runGitDiff(init, last_output),
         .patch => try runGitPatch(init, last_output),
@@ -857,6 +865,10 @@ fn runWhere(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitStatus(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":git", &.{ "git", "status", "--short", "--branch" }, "clean\n");
+}
+
+fn runGitWorktrees(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":worktrees", &.{ "git", "worktree", "list", "--porcelain" }, "no worktrees\n");
 }
 
 fn runGitDiff(init: std.process.Init, log: *[]u8) !void {

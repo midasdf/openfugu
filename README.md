@@ -89,7 +89,7 @@ route and execute it, press Tab to accept command suggestions, use Up/Down for
 input history, press PageUp/PageDown to page output, use Home/End to jump to
 the output top or bottom, or type `:quit` to exit.
 The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:where`,
-`:git`, `:diff`, `:patch`, `:verify`, `:cancel`,
+`:worktrees`, `:git`, `:diff`, `:patch`, `:verify`, `:cancel`,
 `:dry-run`, `:no-apply`, `:apply`,
 `:agent <name>`, `:mode <name>`, `:planner <name>`, `:reset-routing`,
 `:plan <task>`, `:route <task>`, `:replay <run-id>`, `:clear`, and
