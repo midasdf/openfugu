@@ -1,5 +1,6 @@
 pub const config = @import("config.zig");
 pub const types = @import("core/types.zig");
+pub const budget = @import("core/budget.zig");
 pub const adapter = @import("adapter/adapter.zig");
 pub const antigravity = @import("adapter/antigravity.zig");
 pub const claude_code = @import("adapter/claude_code.zig");
@@ -7,6 +8,7 @@ pub const codex = @import("adapter/codex.zig");
 pub const policy = @import("conductor/policy.zig");
 pub const environment = @import("proc/environment.zig");
 pub const conductor = @import("conductor/loop.zig");
+pub const refinement = @import("conductor/refinement.zig");
 pub const context = @import("context/broker.zig");
 pub const heuristic = @import("planner/heuristic.zig");
 pub const mux = @import("proc/mux.zig");
@@ -27,6 +29,7 @@ pub const fake = @import("adapter/fake.zig");
 test {
     _ = config;
     _ = types;
+    _ = budget;
     _ = adapter;
     _ = antigravity;
     _ = claude_code;
@@ -34,6 +37,7 @@ test {
     _ = policy;
     _ = environment;
     _ = conductor;
+    _ = refinement;
     _ = context;
     _ = heuristic;
     _ = mux;

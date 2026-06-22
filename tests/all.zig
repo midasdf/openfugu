@@ -5,4 +5,5 @@ test {
     _ = @import("unit/conductor_worktree_test.zig");
     _ = @import("unit/adapter_contract_test.zig");
     _ = @import("unit/quota_policy_test.zig");
+    _ = @import("unit/refinement_test.zig");
 }
