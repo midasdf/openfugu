@@ -97,6 +97,16 @@ pub fn applyNoCommit(allocator: std.mem.Allocator, io: std.Io, snap: Snapshot, c
     if (pick.exit_code != 0) return error.ApplyFailed;
 }
 
+pub fn cleanupCandidate(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8, candidate: Candidate) !void {
+    var remove = try runGit(allocator, io, repo_path, &.{ "worktree", "remove", "--force", candidate.worktree_path });
+    defer remove.deinit(allocator);
+    if (remove.exit_code != 0) return error.WorktreeCleanupFailed;
+
+    var branch = try runGit(allocator, io, repo_path, &.{ "branch", "-D", candidate.branch });
+    defer branch.deinit(allocator);
+    if (branch.exit_code != 0) return error.BranchCleanupFailed;
+}
+
 fn requireClean(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) !void {
     var result = try runGit(allocator, io, repo_path, &.{ "status", "--porcelain" });
     defer result.deinit(allocator);

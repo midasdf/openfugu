@@ -48,20 +48,58 @@ test "fake worker verifies applies and reverifies a git fixture" {
     try std.testing.expectEqualStrings("good\n", applied);
 }
 
+test "workspace cleanup removes candidate worktree and branch" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+
+    const root = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "repo" });
+    defer std.testing.allocator.free(root);
+    const worktrees = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "worktrees" });
+    defer std.testing.allocator.free(worktrees);
+
+    try tmp.dir.createDirPath(std.testing.io, "repo");
+    try tmp.dir.createDirPath(std.testing.io, "worktrees");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "repo/answer.txt", .data = "ok\n" });
+    try git(root, &.{ "init", "-b", "main" });
+    try git(root, &.{ "config", "user.email", "openfugu@example.invalid" });
+    try git(root, &.{ "config", "user.name", "OpenFugu Test" });
+    try git(root, &.{ "add", "answer.txt" });
+    try git(root, &.{ "commit", "-m", "initial" });
+
+    var snap = try openfugu.workspace.snapshot(std.testing.allocator, std.testing.io, root);
+    defer snap.deinit(std.testing.allocator);
+    var candidate = try openfugu.workspace.createCandidate(std.testing.allocator, std.testing.io, snap, worktrees, "run2", "cand2", "fake");
+    defer candidate.deinit(std.testing.allocator);
+
+    try openfugu.workspace.cleanupCandidate(std.testing.allocator, std.testing.io, root, candidate);
+
+    try std.testing.expectError(error.FileNotFound, std.Io.Dir.cwd().access(std.testing.io, candidate.worktree_path, .{}));
+    var branch = try gitOutput(root, &.{ "branch", "--list", candidate.branch });
+    defer branch.deinit(std.testing.allocator);
+    try std.testing.expectEqualStrings("", std.mem.trim(u8, branch.stdout_tail, " \n\r\t"));
+}
+
 fn git(cwd: []const u8, args: []const []const u8) !void {
+    var result = try gitOutput(cwd, args);
+    defer result.deinit(std.testing.allocator);
+
+    if (result.exit_code != 0) return error.GitFailed;
+}
+
+fn gitOutput(cwd: []const u8, args: []const []const u8) !openfugu.runner.RunResult {
     var argv = try std.testing.allocator.alloc([]const u8, args.len + 1);
     defer std.testing.allocator.free(argv);
     argv[0] = "git";
     for (args, 0..) |arg, i| argv[i + 1] = arg;
 
-    var result = try openfugu.runner.run(std.testing.allocator, std.testing.io, .{
+    return openfugu.runner.run(std.testing.allocator, std.testing.io, .{
         .executable = "git",
         .argv = argv,
         .cwd = cwd,
         .stdout_tail_bytes = 4096,
         .stderr_tail_bytes = 4096,
     });
-    defer result.deinit(std.testing.allocator);
-
-    if (result.exit_code != 0) return error.GitFailed;
 }
