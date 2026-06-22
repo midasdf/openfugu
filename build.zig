@@ -40,10 +40,21 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const fake_agent_step = b.addInstallArtifact(fake_agent, .{});
+    const check_file = b.addExecutable(.{
+        .name = "openfugu-check-file",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/fixtures/check_file.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const check_file_step = b.addInstallArtifact(check_file, .{});
     tests.step.dependOn(&fake_agent_step.step);
+    tests.step.dependOn(&check_file_step.step);
     const run_tests = b.addRunArtifact(tests);
     const test_options = b.addOptions();
     test_options.addOption([]const u8, "fake_agent_path", b.getInstallPath(.bin, "openfugu-fake-agent"));
+    test_options.addOption([]const u8, "check_file_path", b.getInstallPath(.bin, "openfugu-check-file"));
     test_mod.addOptions("test_options", test_options);
 
     const test_step = b.step("test", "Run unit tests");

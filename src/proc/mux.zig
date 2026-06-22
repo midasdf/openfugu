@@ -1,7 +1,7 @@
 const std = @import("std");
 const runner = @import("runner.zig");
 
-pub fn runAll(allocator: std.mem.Allocator, specs: []const runner.RunSpec) ![]runner.RunResult {
+pub fn runAll(allocator: std.mem.Allocator, io: std.Io, specs: []const runner.RunSpec) ![]runner.RunResult {
     const results = try allocator.alloc(runner.RunResult, specs.len);
     errdefer allocator.free(results);
 
@@ -11,7 +11,7 @@ pub fn runAll(allocator: std.mem.Allocator, specs: []const runner.RunSpec) ![]ru
     }
 
     for (specs, 0..) |spec, i| {
-        results[i] = try runner.run(allocator, spec);
+        results[i] = try runner.run(allocator, io, spec);
         filled += 1;
     }
 

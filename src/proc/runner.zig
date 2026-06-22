@@ -25,12 +25,12 @@ pub const RunResult = struct {
     }
 };
 
-pub fn run(allocator: std.mem.Allocator, spec: RunSpec) !RunResult {
+pub fn run(allocator: std.mem.Allocator, io: std.Io, spec: RunSpec) !RunResult {
     var s = session.Session.init("run");
     try s.transition(.spawning);
     try s.transition(.running);
 
-    const raw = try std.process.run(allocator, std.testing.io, .{
+    const raw = try std.process.run(allocator, io, .{
         .argv = spec.argv,
         .cwd = .{ .path = spec.cwd },
     });

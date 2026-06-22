@@ -17,7 +17,7 @@ test "runner captures stdout stderr exit code and normalized events" {
     const fake_agent = test_options.fake_agent_path;
 
     const argv = [_][]const u8{fake_agent};
-    var result = try openfugu.runner.run(std.testing.allocator, .{
+    var result = try openfugu.runner.run(std.testing.allocator, std.testing.io, .{
         .executable = fake_agent,
         .argv = &argv,
         .cwd = ".",
@@ -42,7 +42,7 @@ test "mux runs multiple fake agents without dropping output" {
         .{ .executable = fake_agent, .argv = &argv, .cwd = "." },
         .{ .executable = fake_agent, .argv = &argv, .cwd = "." },
     };
-    const results = try openfugu.mux.runAll(std.testing.allocator, &specs);
+    const results = try openfugu.mux.runAll(std.testing.allocator, std.testing.io, &specs);
     defer openfugu.mux.freeResults(std.testing.allocator, results);
 
     try std.testing.expectEqual(@as(usize, 2), results.len);

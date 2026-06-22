@@ -1,6 +1,7 @@
 pub const config = @import("config.zig");
 pub const types = @import("core/types.zig");
 pub const environment = @import("proc/environment.zig");
+pub const conductor = @import("conductor/loop.zig");
 pub const context = @import("context/broker.zig");
 pub const heuristic = @import("planner/heuristic.zig");
 pub const mux = @import("proc/mux.zig");
@@ -12,12 +13,15 @@ pub const session = @import("proc/session.zig");
 pub const signal = @import("proc/signal.zig");
 pub const subscription_agent = @import("planner/subscription_agent.zig");
 pub const validate = @import("planner/validate.zig");
+pub const verify = @import("verify/commands.zig");
+pub const workspace = @import("workspace/worktree.zig");
 pub const fake = @import("adapter/fake.zig");
 
 test {
     _ = config;
     _ = types;
     _ = environment;
+    _ = conductor;
     _ = context;
     _ = heuristic;
     _ = mux;
@@ -29,5 +33,7 @@ test {
     _ = signal;
     _ = subscription_agent;
     _ = validate;
+    _ = verify;
+    _ = workspace;
     _ = fake;
 }
