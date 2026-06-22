@@ -109,6 +109,15 @@ test "task cli runs probed subscription agent through verify apply reverify" {
     const applied = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, applied_path, std.testing.allocator, .limited(1024));
     defer std.testing.allocator.free(applied);
     try std.testing.expectEqualStrings("good\n", applied);
+
+    const ledger_path = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "ledger.jsonl" });
+    defer std.testing.allocator.free(ledger_path);
+    const ledger = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, ledger_path, std.testing.allocator, .limited(4096));
+    defer std.testing.allocator.free(ledger);
+    try std.testing.expect(std.mem.indexOf(u8, ledger, "\"agent\":\"fake\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, ledger, "\"content_hash\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, ledger, "fix bug") == null);
+    try std.testing.expect(std.mem.indexOf(u8, ledger, "\"reverified\":true") != null);
 }
 
 test "task cli no-apply verifies candidate without changing source repo" {

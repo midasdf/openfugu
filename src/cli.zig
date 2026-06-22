@@ -14,6 +14,7 @@ const conductor = @import("conductor/loop.zig");
 const verify = @import("verify/commands.zig");
 const types = @import("core/types.zig");
 const adapter = @import("adapter/adapter.zig");
+const ledger = @import("obs/ledger.zig");
 
 const claude_version_argv = [_][]const u8{ "claude", "--version" };
 const claude_auth_argv = [_][]const u8{ "claude", "auth", "status" };
@@ -287,6 +288,18 @@ fn runFirstRunnableSpec(
             .apply = !no_apply,
         });
         defer summary.deinit(allocator);
+        const ledger_path = try runLedgerPath(allocator, worktree_root);
+        defer allocator.free(ledger_path);
+        try ledger.append(allocator, io, ledger_path, .{
+            .run_id = "cli",
+            .agent = report_value.name,
+            .content = task_text,
+            .include_content = false,
+            .verification_passed = summary.candidate_verification.passed,
+            .accepted = summary.accepted,
+            .applied = summary.applied,
+            .reverified = summary.reverified,
+        });
 
         const code = if (summary.accepted and (no_apply or (summary.applied and summary.reverified))) exit_ok else exit_verify;
         if (code != exit_ok and continuesAfterFailure(mode)) continue;
@@ -340,6 +353,11 @@ fn agentAllowed(filter: ?[]const u8, name: []const u8) bool {
 fn continuesAfterFailure(mode: ?[]const u8) bool {
     const value = mode orelse return false;
     return std.mem.eql(u8, value, "race") or std.mem.eql(u8, value, "ensemble");
+}
+
+fn runLedgerPath(allocator: std.mem.Allocator, worktree_root: []const u8) ![]u8 {
+    const parent = std.fs.path.dirname(worktree_root) orelse ".";
+    return std.fs.path.join(allocator, &.{ parent, "ledger.jsonl" });
 }
 
 fn invocationForSpec(allocator: std.mem.Allocator, spec: probe.DetectSpec, task_text_value: []const u8) !adapter.OwnedInvocation {
