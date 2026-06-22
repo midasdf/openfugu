@@ -15,6 +15,8 @@ pub const CommandResult = struct {
     timed_out: bool = false,
     canceled: bool = false,
     log_path: ?[]u8 = null,
+    started_ms: i64 = 0,
+    ended_ms: i64 = 0,
     stdout_tail: []u8,
     stderr_tail: []u8,
 
@@ -57,6 +59,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, cwd: []const u8, commands: 
 
     var passed = true;
     for (commands, 0..) |command, i| {
+        const started_ms = nowMs(io);
         var raw = try runner.run(allocator, io, .{
             .executable = command.argv[0],
             .argv = command.argv,
@@ -66,6 +69,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, cwd: []const u8, commands: 
             .timeout_ms = command.timeout_ms,
             .log_path = command.log_path,
         });
+        const ended_ms = nowMs(io);
         defer raw.deinit(allocator);
 
         results[i] = .{
@@ -75,6 +79,8 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, cwd: []const u8, commands: 
             .timed_out = raw.timed_out,
             .canceled = raw.canceled,
             .log_path = if (command.log_path) |path| try allocator.dupe(u8, path) else null,
+            .started_ms = started_ms,
+            .ended_ms = ended_ms,
             .stdout_tail = try allocator.dupe(u8, raw.stdout_tail),
             .stderr_tail = try allocator.dupe(u8, raw.stderr_tail),
         };
@@ -87,4 +93,8 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, cwd: []const u8, commands: 
         .unverified = false,
         .commands = results,
     };
+}
+
+fn nowMs(io: std.Io) i64 {
+    return std.Io.Timestamp.now(io, .real).toMilliseconds();
 }

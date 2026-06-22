@@ -135,6 +135,18 @@ test "objective verifier records command log path" {
     try std.testing.expect(std.mem.indexOf(u8, logged, "fake out") != null);
 }
 
+test "objective verifier records command start and end times" {
+    const fake_agent = test_options.fake_agent_path;
+    const argv = [_][]const u8{fake_agent};
+
+    var verification = try openfugu.verify.run(std.testing.allocator, std.testing.io, ".", &.{
+        .{ .name = "fake", .argv = &argv },
+    });
+    defer verification.deinit(std.testing.allocator);
+
+    try std.testing.expect(verification.commands[0].started_ms <= verification.commands[0].ended_ms);
+}
+
 test "signal cancellation terminates process group and reaps child" {
     const sleep_agent = test_options.sleep_agent_path;
     const argv = [_][]const u8{sleep_agent};
