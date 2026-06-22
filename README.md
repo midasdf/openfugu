@@ -7,6 +7,11 @@ Issues and pull requests are very welcome!
 
 ## Boundaries
 
+- openfugu is architecture-inspired by Sakana AI's Fugu Ultra and related
+  research papers; it is not a reproduction of trained coordinators, private
+  routers, or benchmark claims from those papers.
+- openfugu is not affiliated with, endorsed by, or sponsored by Anthropic,
+  OpenAI, Google, or Sakana AI.
 - openfugu does not call vendor model APIs directly.
 - openfugu does not read, store, or reuse API keys, OAuth tokens, cookies, or
   keychain secrets.
