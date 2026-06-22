@@ -93,6 +93,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :diff    show git diff stat
                     \\  :staged  show staged diff stat
                     \\  :patch   show git patch
+                    \\  :ci      show recent GitHub Actions runs
                     \\  :verify  run local verification
                     \\  :build   run build
                     \\  :test    run tests
@@ -173,6 +174,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .patch => {
                 try runGitPatch(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .ci => {
+                try runCi(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .verify => {
@@ -426,6 +431,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":diff",
         ":staged",
         ":patch",
+        ":ci",
         ":verify",
         ":build",
         ":test",
@@ -814,6 +820,7 @@ fn handleInteractiveLine(
             \\  :diff    show git diff stat
             \\  :staged  show staged diff stat
             \\  :patch   show git patch
+            \\  :ci      show recent GitHub Actions runs
             \\  :verify  run local verification
             \\  :build   run build
             \\  :test    run tests
@@ -863,6 +870,7 @@ fn handleInteractiveLine(
         .diff => try runGitDiff(init, last_output),
         .staged => try runGitStaged(init, last_output),
         .patch => try runGitPatch(init, last_output),
+        .ci => try runCi(init, last_output),
         .verify => try runLocalVerify(init, last_output),
         .build => try runLocalBuild(init, last_output),
         .test_ => try runLocalTests(init, last_output),
@@ -1203,6 +1211,10 @@ fn runGitStaged(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitPatch(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":patch", &.{ "git", "diff", "--no-ext-diff" }, "no patch\n");
+}
+
+fn runCi(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":ci", &.{ "gh", "run", "list", "--limit", "5" }, "no ci runs\n");
 }
 
 fn runRg(init: std.process.Init, log: *[]u8, pattern: []const u8) !void {
