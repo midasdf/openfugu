@@ -289,15 +289,39 @@ fn commandValue(input: []const u8, command: []const u8) ?[]const u8 {
     return value;
 }
 
+pub const OpenSpec = struct {
+    path: []const u8,
+    line: ?usize = null,
+};
+
+pub fn parseOpenSpec(input: []const u8) OpenSpec {
+    const colon = std.mem.lastIndexOfScalar(u8, input, ':') orelse return .{ .path = input };
+    if (colon == 0 or colon + 1 == input.len) return .{ .path = input };
+    const line = std.fmt.parseInt(usize, input[colon + 1 ..], 10) catch return .{ .path = input };
+    if (line == 0) return .{ .path = input };
+    return .{ .path = input[0..colon], .line = line };
+}
+
 pub fn numberedLines(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+    return numberedLinesAround(allocator, text, 1, std.math.maxInt(usize));
+}
+
+pub fn numberedLinesAround(allocator: std.mem.Allocator, text: []const u8, first_line: usize, max_lines: usize) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var line_no: usize = 1;
+    var emitted: usize = 0;
     var lines = std.mem.splitScalar(u8, text, '\n');
     while (lines.next()) |line| {
         if (line.len == 0 and lines.peek() == null) break;
+        if (line_no < first_line) {
+            line_no += 1;
+            continue;
+        }
+        if (emitted >= max_lines) break;
         try out.print(allocator, "{d:4} | {s}\n", .{ line_no, line });
         line_no += 1;
+        emitted += 1;
     }
     return out.toOwnedSlice(allocator);
 }

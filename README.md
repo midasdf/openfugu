@@ -93,7 +93,7 @@ The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:ledger`,
 `:where`, `:pwd`, `:worktrees`, `:git`, `:log`, `:diff`, `:patch`, `:verify`, `:cancel`,
 `:rerun`, `:save <file>`, `:run <command>`, `:rg <pattern>`, `:todo`, `:ls [path]`, `:files [path]`,
 `:cd <path>`, `:cwd <path>`, `:load <file>`,
-`:open <file>` with line numbers, `:dry-run`, `:no-apply`, `:apply`,
+`:open <file[:line]>` with line numbers, `:dry-run`, `:no-apply`, `:apply`,
 `:agent <name>`, `:mode <name>`, `:planner <name>`, `:reset-routing`,
 `:plan <task>`, `:route <task>`, `:replay <run-id>`, `:clear`, `:history`, and
 `:clear-history`.

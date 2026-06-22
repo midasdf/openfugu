@@ -358,16 +358,20 @@ fn loadTaskFile(init: std.process.Init, last_output: *[]u8, path: []const u8) ![
 }
 
 fn showFile(init: std.process.Init, log: *[]u8, path: []const u8) !void {
-    const text = std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024)) catch |err| {
+    const spec = openfugu.cli.parseOpenSpec(path);
+    const text = std.Io.Dir.cwd().readFileAlloc(init.io, spec.path, init.gpa, .limited(128 * 1024)) catch |err| {
         const message = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
         defer init.gpa.free(message);
         try replaceLog(init.gpa, log, message);
         return;
     };
     defer init.gpa.free(text);
-    const numbered = try openfugu.cli.numberedLines(init.gpa, text);
+    const numbered = if (spec.line) |line|
+        try openfugu.cli.numberedLinesAround(init.gpa, text, line, 20)
+    else
+        try openfugu.cli.numberedLines(init.gpa, text);
     defer init.gpa.free(numbered);
-    try appendLog(init.gpa, log, path, numbered);
+    try appendLog(init.gpa, log, spec.path, numbered);
 }
 
 fn rawRepl(init: std.process.Init) !u8 {

@@ -274,6 +274,13 @@ test "numbered file view prefixes lines" {
     try std.testing.expectEqualStrings("   1 | alpha\n   2 | beta\n", text);
 }
 
+test "open spec accepts optional line suffix" {
+    const spec = openfugu.cli.parseOpenSpec("src/main.zig:42");
+
+    try std.testing.expectEqualStrings("src/main.zig", spec.path);
+    try std.testing.expectEqual(@as(?usize, 42), spec.line);
+}
+
 test "interactive input classifies prompt lines" {
     try std.testing.expectEqualStrings("fix README", openfugu.cli.interactiveInput("  fix README\n").task);
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.empty, openfugu.cli.interactiveInput(" \n"));
