@@ -80,6 +80,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :doctor  show agent health
                     \\  :agents  list runnable agents
                     \\  :usage   show routing ledger summary
+                    \\  :ledger  show recent ledger text
                     \\  :where   show cwd and git branch
                     \\  :worktrees show git worktrees
                     \\  :git     show git status
@@ -117,6 +118,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .usage => {
                 try runInteractiveCommand(init, &last_output, &.{ "openfugu", "usage" }, ":usage");
+                try writer.interface.writeAll(last_output);
+            },
+            .ledger => {
+                try runLedgerTail(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .where_ => {
@@ -273,6 +278,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":doctor",
         ":agents",
         ":usage",
+        ":ledger",
         ":where",
         ":worktrees",
         ":git",
@@ -582,6 +588,7 @@ fn handleInteractiveLine(
             \\  :doctor  show agent health
             \\  :agents  list runnable agents
             \\  :usage   show routing ledger summary
+            \\  :ledger  show recent ledger text
             \\  :where   show cwd and git branch
             \\  :worktrees show git worktrees
             \\  :git     show git status
@@ -612,6 +619,7 @@ fn handleInteractiveLine(
             try appendLog(init.gpa, last_output, ":agents", agent_text);
         },
         .usage => try runInteractiveCommand(init, last_output, &.{ "openfugu", "usage" }, ":usage"),
+        .ledger => try runLedgerTail(init, last_output),
         .where_ => try runWhere(init, last_output),
         .worktrees => try runGitWorktrees(init, last_output),
         .git => try runGitStatus(init, last_output),
@@ -840,6 +848,15 @@ fn runInteractiveCommand(init: std.process.Init, log: *[]u8, args: []const []con
     const text = try runCommandText(init, args);
     defer init.gpa.free(text);
     try appendLog(init.gpa, log, label, text);
+}
+
+fn runLedgerTail(init: std.process.Init, log: *[]u8) !void {
+    const text = std.Io.Dir.cwd().readFileAlloc(init.io, ".openfugu/ledger.jsonl", init.gpa, .limited(64 * 1024)) catch {
+        try appendLog(init.gpa, log, ":ledger", "no ledger\n");
+        return;
+    };
+    defer init.gpa.free(text);
+    try appendLog(init.gpa, log, ":ledger", if (text.len == 0) "no ledger\n" else text);
 }
 
 fn runWhere(init: std.process.Init, log: *[]u8) !void {
