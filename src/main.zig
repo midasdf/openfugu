@@ -72,6 +72,7 @@ fn repl(init: std.process.Init) !u8 {
                 try replaceLog(init.gpa, &last_output,
                     \\Commands:
                     \\  :status  show current routing state
+                    \\  :reset-routing reset routing to defaults
                     \\  :doctor  show agent health
                     \\  :agents  list runnable agents
                     \\  :dry-run toggle dry-run mode
@@ -101,6 +102,11 @@ fn repl(init: std.process.Init) !u8 {
             },
             .status => {
                 try replaceStatusLog(init.gpa, &last_output, dry_run, agent_filter, mode, planner, false);
+                try writer.interface.writeAll(last_output);
+            },
+            .reset_routing => {
+                try resetRouting(init.gpa, &dry_run, &agent_filter, &mode, &planner);
+                try replaceLog(init.gpa, &last_output, "routing reset\n");
                 try writer.interface.writeAll(last_output);
             },
             .dry_run => {
@@ -197,6 +203,7 @@ fn rawRepl(init: std.process.Init) !u8 {
     input.setSuggestions(&.{
         ":help",
         ":status",
+        ":reset-routing",
         ":doctor",
         ":agents",
         ":dry-run",
@@ -387,6 +394,22 @@ fn replaceStatusLog(
     try replaceLog(allocator, log, line);
 }
 
+fn resetRouting(
+    allocator: std.mem.Allocator,
+    dry_run: *bool,
+    agent_filter: *?[]u8,
+    mode: *[]u8,
+    planner: *[]u8,
+) !void {
+    dry_run.* = false;
+    if (agent_filter.*) |old| allocator.free(old);
+    agent_filter.* = null;
+    allocator.free(mode.*);
+    mode.* = try allocator.dupe(u8, "auto");
+    allocator.free(planner.*);
+    planner.* = try allocator.dupe(u8, "heuristic");
+}
+
 fn handleInteractiveLine(
     init: std.process.Init,
     line: []const u8,
@@ -411,6 +434,7 @@ fn handleInteractiveLine(
         .help => try replaceLog(init.gpa, last_output,
             \\Commands:
             \\  :status  show current routing state
+            \\  :reset-routing reset routing to defaults
             \\  :doctor  show agent health
             \\  :agents  list runnable agents
             \\  :dry-run toggle dry-run mode
@@ -433,6 +457,10 @@ fn handleInteractiveLine(
             try appendLog(init.gpa, last_output, ":agents", agent_text);
         },
         .status => try replaceStatusLog(init.gpa, last_output, dry_run.*, agent_filter.*, mode.*, planner.*, job.* != null),
+        .reset_routing => {
+            try resetRouting(init.gpa, dry_run, agent_filter, mode, planner);
+            try replaceLog(init.gpa, last_output, "routing reset\n");
+        },
         .dry_run => {
             dry_run.* = !dry_run.*;
             init.gpa.free(last_output.*);

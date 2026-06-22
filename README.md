@@ -88,5 +88,5 @@ line-editing shortcuts work inside the fullscreen dashboard. Type a task to
 route and execute it, press Tab to accept command suggestions, use Up/Down for
 task history, or type `:quit` to exit.
 The TUI also accepts `:status`, `:doctor`, `:agents`, `:dry-run`, `:apply`,
-`:agent <name>`, `:mode <name>`, `:planner <name>`, `:clear`, and
-`:clear-history`.
+`:agent <name>`, `:mode <name>`, `:planner <name>`, `:reset-routing`,
+`:clear`, and `:clear-history`.
