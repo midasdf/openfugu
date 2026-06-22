@@ -699,7 +699,15 @@ fn handleInteractiveLine(
         },
         .rerun => try replaceLog(init.gpa, last_output, "no previous task\n"),
         .save => |path| try saveOutput(init, last_output, path),
-        .run => |command| try runShellCommand(init, last_output, command),
+        .run => |command| {
+            if (job.* != null) {
+                try replaceLog(init.gpa, last_output, "task already running\n");
+                return false;
+            }
+            try drawRaw(init, term, command, last_output.*, agents.*, history.*, dry_run.*, agent_filter.*, mode.*, planner.*, command, null);
+            job.* = try startTaskJob(init.gpa, init.io, &.{ "/bin/sh", "-lc", command }, command, false);
+            try replaceLog(init.gpa, last_output, "command running\n");
+        },
         .cwd => |path| {
             if (job.* != null) {
                 try replaceLog(init.gpa, last_output, "task already running\n");
@@ -762,24 +770,26 @@ fn handleInteractiveLine(
                 try args.append(planner.*);
             }
             try args.append(task);
-            job.* = try startTaskJob(init.gpa, init.io, args.items, task);
+            job.* = try startTaskJob(init.gpa, init.io, args.items, task, true);
             try replaceLog(init.gpa, last_output, "task running\n");
         },
     }
     return false;
 }
 
-fn startTaskJob(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8, label: []const u8) !*TaskJob {
+fn startTaskJob(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8, label: []const u8, replace_with_self: bool) !*TaskJob {
     const job = try allocator.create(TaskJob);
     errdefer allocator.destroy(job);
     const argv_copy = try dupArgv(allocator, argv);
     errdefer freeArgv(allocator, argv_copy);
-    const self_exe_z = try std.process.executablePathAlloc(io, allocator);
-    defer allocator.free(self_exe_z);
-    const self_exe = try allocator.dupe(u8, self_exe_z);
-    errdefer allocator.free(self_exe);
-    allocator.free(argv_copy[0]);
-    argv_copy[0] = self_exe;
+    if (replace_with_self) {
+        const self_exe_z = try std.process.executablePathAlloc(io, allocator);
+        defer allocator.free(self_exe_z);
+        const self_exe = try allocator.dupe(u8, self_exe_z);
+        errdefer allocator.free(self_exe);
+        allocator.free(argv_copy[0]);
+        argv_copy[0] = self_exe;
+    }
     const label_copy = try allocator.dupe(u8, label);
     errdefer allocator.free(label_copy);
     job.* = .{
