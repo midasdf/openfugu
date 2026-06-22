@@ -653,28 +653,17 @@ fn runInteractiveCommand(init: std.process.Init, log: *[]u8, args: []const []con
 }
 
 fn runGitStatus(init: std.process.Init, log: *[]u8) !void {
-    var result = openfugu.runner.run(init.gpa, init.io, .{
-        .executable = "git",
-        .argv = &.{ "git", "status", "--short", "--branch" },
-        .cwd = ".",
-        .stdout_tail_bytes = 8192,
-        .stderr_tail_bytes = 2048,
-        .timeout_ms = 5000,
-    }) catch |err| {
-        const text = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
-        defer init.gpa.free(text);
-        try appendLog(init.gpa, log, ":git", text);
-        return;
-    };
-    defer result.deinit(init.gpa);
-    const text = if (result.exit_code == 0) result.stdout_tail else result.stderr_tail;
-    try appendLog(init.gpa, log, ":git", if (text.len == 0) "clean\n" else text);
+    try runGitCommand(init, log, ":git", &.{ "git", "status", "--short", "--branch" }, "clean\n");
 }
 
 fn runGitDiff(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":diff", &.{ "git", "diff", "--stat" }, "no diff\n");
+}
+
+fn runGitCommand(init: std.process.Init, log: *[]u8, label: []const u8, argv: []const []const u8, empty_text: []const u8) !void {
     var result = openfugu.runner.run(init.gpa, init.io, .{
         .executable = "git",
-        .argv = &.{ "git", "diff", "--stat" },
+        .argv = argv,
         .cwd = ".",
         .stdout_tail_bytes = 8192,
         .stderr_tail_bytes = 2048,
@@ -682,12 +671,12 @@ fn runGitDiff(init: std.process.Init, log: *[]u8) !void {
     }) catch |err| {
         const text = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
         defer init.gpa.free(text);
-        try appendLog(init.gpa, log, ":diff", text);
+        try appendLog(init.gpa, log, label, text);
         return;
     };
     defer result.deinit(init.gpa);
     const text = if (result.exit_code == 0) result.stdout_tail else result.stderr_tail;
-    try appendLog(init.gpa, log, ":diff", if (text.len == 0) "no diff\n" else text);
+    try appendLog(init.gpa, log, label, if (text.len == 0) empty_text else text);
 }
 
 fn runLocalVerify(init: std.process.Init, log: *[]u8) !void {
