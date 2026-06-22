@@ -90,6 +90,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :cancel  cancel running task
                     \\  :rerun   rerun last task
                     \\  :save    save current output to file
+                    \\  :run     run shell command
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
@@ -185,6 +186,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .save => |path| {
                 try saveOutput(init, &last_output, path);
+                try writer.interface.writeAll(last_output);
+            },
+            .run => |command| {
+                try runShellCommand(init, &last_output, command);
                 try writer.interface.writeAll(last_output);
             },
             .plan => |task| {
@@ -298,6 +303,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":cancel",
         ":rerun",
         ":save ",
+        ":run ",
         ":dry-run",
         ":no-apply",
         ":apply",
@@ -627,6 +633,7 @@ fn handleInteractiveLine(
             \\  :cancel  cancel running task
             \\  :rerun   rerun last task
             \\  :save    save current output to file
+            \\  :run     run shell command
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
@@ -685,6 +692,7 @@ fn handleInteractiveLine(
         },
         .rerun => try replaceLog(init.gpa, last_output, "no previous task\n"),
         .save => |path| try saveOutput(init, last_output, path),
+        .run => |command| try runShellCommand(init, last_output, command),
         .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
         .replay => |run_id| try runReplay(init, last_output, run_id),
@@ -1037,6 +1045,36 @@ fn saveOutput(init: std.process.Init, log: *[]u8, path: []const u8) !void {
     const message = try std.fmt.allocPrint(init.gpa, "saved {s}\n", .{path});
     defer init.gpa.free(message);
     try replaceLog(init.gpa, log, message);
+}
+
+fn runShellCommand(init: std.process.Init, log: *[]u8, command: []const u8) !void {
+    var result = openfugu.runner.run(init.gpa, init.io, .{
+        .executable = "/bin/sh",
+        .argv = &.{ "/bin/sh", "-lc", command },
+        .cwd = ".",
+        .stdout_tail_bytes = 8192,
+        .stderr_tail_bytes = 4096,
+        .timeout_ms = 30_000,
+    }) catch |err| {
+        const text = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+        defer init.gpa.free(text);
+        try appendLog(init.gpa, log, command, text);
+        return;
+    };
+    defer result.deinit(init.gpa);
+
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(init.gpa);
+    if (result.timed_out) try out.appendSlice(init.gpa, "timed out\n");
+    if (result.exit_code) |code| {
+        if (code != 0) try out.print(init.gpa, "exit={}\n", .{code});
+    }
+    if (result.stdout_tail.len != 0) try out.appendSlice(init.gpa, result.stdout_tail);
+    if (result.stderr_tail.len != 0) try out.appendSlice(init.gpa, result.stderr_tail);
+    if (out.items.len == 0) try out.appendSlice(init.gpa, "ok\n");
+    const text = try out.toOwnedSlice(init.gpa);
+    defer init.gpa.free(text);
+    try appendLog(init.gpa, log, command, text);
 }
 
 fn replaceLog(allocator: std.mem.Allocator, log: *[]u8, text: []const u8) !void {
