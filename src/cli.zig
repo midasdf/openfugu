@@ -124,7 +124,7 @@ pub fn runWithProbeSpecsInRepo(
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
     if (try taskText(args)) |task| {
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), reviewFromArgs(args));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"));
     }
     return run(allocator, args);
 }
@@ -202,7 +202,8 @@ fn takesValue(arg: []const u8) bool {
     return std.mem.eql(u8, arg, "--mode") or
         std.mem.eql(u8, arg, "--agents") or
         std.mem.eql(u8, arg, "--planner") or
-        std.mem.eql(u8, arg, "--depth");
+        std.mem.eql(u8, arg, "--depth") or
+        std.mem.eql(u8, arg, "--cooldown-agent");
 }
 
 fn validateOptionValue(flag: []const u8, value: []const u8) !void {
@@ -333,11 +334,13 @@ fn runFirstRunnableSpec(
     mode: ?[]const u8,
     depth: ?[]const u8,
     review: model_review.Review,
+    cooldown_filter: ?[]const u8,
 ) !Result {
     try std.Io.Dir.cwd().createDirPath(io, worktree_root);
     var saw_runnable = false;
     for (specs) |spec| {
         if (!agentAllowed(agents_filter, spec.name)) continue;
+        if (agentListed(cooldown_filter, spec.name)) continue;
         var report_value = try probe.detect(allocator, io, spec);
         defer report_value.deinit(allocator);
         if (!report_value.runnable) continue;
@@ -421,6 +424,11 @@ fn optionValue(args: []const []const u8, flag: []const u8) ?[]const u8 {
 
 fn agentAllowed(filter: ?[]const u8, name: []const u8) bool {
     const text = filter orelse return true;
+    return agentListed(text, name);
+}
+
+fn agentListed(filter: ?[]const u8, name: []const u8) bool {
+    const text = filter orelse return false;
     var parts = std.mem.splitScalar(u8, text, ',');
     while (parts.next()) |part_raw| {
         const part = std.mem.trim(u8, part_raw, " \t\r\n");
