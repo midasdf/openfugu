@@ -2,6 +2,7 @@ const std = @import("std");
 const protocol = @import("../adapter/protocol.zig");
 const session = @import("session.zig");
 const types = @import("../core/types.zig");
+const environment = @import("environment.zig");
 
 pub const RunSpec = struct {
     executable: []const u8,
@@ -10,6 +11,7 @@ pub const RunSpec = struct {
     stdout_tail_bytes: usize = 4096,
     stderr_tail_bytes: usize = 4096,
     timeout_ms: ?i64 = null,
+    environ_map: ?*const std.process.Environ.Map = null,
 };
 
 pub const RunResult = struct {
@@ -38,6 +40,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, spec: RunSpec) !RunResult {
         .argv = spec.argv,
         .cwd = .{ .path = spec.cwd },
         .timeout = timeoutFromMs(spec.timeout_ms),
+        .environ_map = spec.environ_map,
     }) catch |err| switch (err) {
         error.Timeout => {
             try s.transition(.timed_out);
@@ -96,6 +99,30 @@ pub fn runInvocation(
         .argv = invocation.argv,
         .cwd = invocation.cwd,
         .timeout_ms = timeoutFromUnsignedMs(timeout_ms),
+    });
+}
+
+pub fn runInvocationWithEnvironment(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    invocation: types.Invocation,
+    timeout_ms: u64,
+    parent_env: *const std.process.Environ.Map,
+) !RunResult {
+    var child_env = switch (invocation.env_policy) {
+        .inherit_filtered => try parent_env.clone(allocator),
+        .empty => std.process.Environ.Map.init(allocator),
+    };
+    defer child_env.deinit();
+
+    if (invocation.env_policy == .inherit_filtered) environment.stripKnownApiKeys(&child_env);
+
+    return run(allocator, io, .{
+        .executable = invocation.executable,
+        .argv = invocation.argv,
+        .cwd = invocation.cwd,
+        .timeout_ms = timeoutFromUnsignedMs(timeout_ms),
+        .environ_map = &child_env,
     });
 }
 

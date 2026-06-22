@@ -107,3 +107,23 @@ test "runner executes invocation through argv without shell" {
     try std.testing.expect(std.mem.indexOf(u8, result.stdout_tail, "fake out") != null);
     try std.testing.expect(std.mem.indexOf(u8, result.stderr_tail, "fake err") != null);
 }
+
+test "runner filters known api key environment for invocations" {
+    const env_agent = test_options.env_agent_path;
+    const argv = [_][]const u8{env_agent};
+
+    var parent_env = std.process.Environ.Map.init(std.testing.allocator);
+    defer parent_env.deinit();
+    try parent_env.put("PATH", "/bin");
+    try parent_env.put("OPENAI_API_KEY", "secret");
+
+    var result = try openfugu.runner.runInvocationWithEnvironment(std.testing.allocator, std.testing.io, .{
+        .executable = env_agent,
+        .argv = &argv,
+        .cwd = ".",
+        .env_policy = .inherit_filtered,
+    }, 1000, &parent_env);
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(u8, 0), result.exit_code.?);
+}

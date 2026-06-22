@@ -25,6 +25,20 @@ test "subscription-only environment strips known api key variables" {
     try std.testing.expectEqualSlices([]const u8, &.{ "PATH", "HOME" }, kept);
 }
 
+test "subscription-only environment map removes known api key variables" {
+    var env = std.process.Environ.Map.init(std.testing.allocator);
+    defer env.deinit();
+    try env.put("PATH", "/bin");
+    try env.put("OPENAI_API_KEY", "secret");
+    try env.put("ANTHROPIC_API_KEY", "secret");
+
+    openfugu.environment.stripKnownApiKeys(&env);
+
+    try std.testing.expect(env.contains("PATH"));
+    try std.testing.expect(!env.contains("OPENAI_API_KEY"));
+    try std.testing.expect(!env.contains("ANTHROPIC_API_KEY"));
+}
+
 test "redaction removes secret values from diagnostic text" {
     const input = "OPENAI_API_KEY=value-to-redact ANTHROPIC_API_KEY=secret CODEx";
     const redacted = try openfugu.config.redactKnownSecrets(std.testing.allocator, input);
