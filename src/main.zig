@@ -63,6 +63,11 @@ fn repl(init: std.process.Init) !u8 {
                 last_output = try init.gpa.dupe(u8, "Cleared.\n");
                 try writer.interface.writeAll(last_output);
             },
+            .clear_history => {
+                try replaceLog(init.gpa, &history, "No tasks yet.\n");
+                try replaceLog(init.gpa, &last_output, "history cleared\n");
+                try writer.interface.writeAll(last_output);
+            },
             .help => {
                 try replaceLog(init.gpa, &last_output,
                     \\Commands:
@@ -75,6 +80,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :mode    set mode: auto, single, race, ensemble
                     \\  :planner set planner: heuristic, subscription-agent
                     \\  :clear   clear this session
+                    \\  :clear-history clear task history
                     \\  :quit    exit
                     \\
                     \\Type any other line to route and execute it.
@@ -206,6 +212,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":planner heuristic",
         ":planner subscription-agent",
         ":clear",
+        ":clear-history",
         ":quit",
     });
 
@@ -284,6 +291,10 @@ fn rawRepl(init: std.process.Init) !u8 {
                     history_index = null;
                     switch (openfugu.cli.interactiveInput(line)) {
                         .task => try task_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n"))),
+                        .clear_history => {
+                            for (task_history.items) |item| init.gpa.free(item);
+                            task_history.clearRetainingCapacity();
+                        },
                         else => {},
                     }
                     const should_quit = try handleInteractiveLine(init, line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
@@ -393,6 +404,10 @@ fn handleInteractiveLine(
         .empty => return false,
         .quit => return true,
         .clear => try replaceLog(init.gpa, last_output, "Cleared.\n"),
+        .clear_history => {
+            try replaceLog(init.gpa, history, "No tasks yet.\n");
+            try replaceLog(init.gpa, last_output, "history cleared\n");
+        },
         .help => try replaceLog(init.gpa, last_output,
             \\Commands:
             \\  :status  show current routing state
@@ -404,6 +419,7 @@ fn handleInteractiveLine(
             \\  :mode    set mode: auto, single, race, ensemble
             \\  :planner set planner: heuristic, subscription-agent
             \\  :clear   clear this session
+            \\  :clear-history clear task history
             \\  :quit    exit
             \\
             \\Type any other line to route and execute it.
