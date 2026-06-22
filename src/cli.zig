@@ -197,6 +197,9 @@ pub const InteractiveInput = union(enum) {
     agents,
     help,
     dry_run,
+    agent: []const u8,
+    mode: []const u8,
+    planner: []const u8,
     task: []const u8,
 };
 
@@ -209,7 +212,19 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":agents")) return .agents;
     if (std.mem.eql(u8, task, ":help")) return .help;
     if (std.mem.eql(u8, task, ":dry-run")) return .dry_run;
+    if (commandValue(task, ":agent")) |value| return .{ .agent = value };
+    if (commandValue(task, ":mode")) |value| return .{ .mode = value };
+    if (commandValue(task, ":planner")) |value| return .{ .planner = value };
     return .{ .task = task };
+}
+
+fn commandValue(input: []const u8, command: []const u8) ?[]const u8 {
+    if (!std.mem.startsWith(u8, input, command)) return null;
+    if (input.len == command.len) return null;
+    if (input[command.len] != ' ') return null;
+    const value = std.mem.trim(u8, input[command.len + 1 ..], " \t");
+    if (value.len == 0) return null;
+    return value;
 }
 
 fn helpText(allocator: std.mem.Allocator) ![]u8 {

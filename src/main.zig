@@ -39,9 +39,21 @@ fn repl(init: std.process.Init) !u8 {
     var history = try init.gpa.dupe(u8, "No tasks yet.\n");
     defer init.gpa.free(history);
     var dry_run = false;
+    var agent_filter: ?[]u8 = null;
+    defer if (agent_filter) |value| init.gpa.free(value);
+    var mode = try init.gpa.dupe(u8, "auto");
+    defer init.gpa.free(mode);
+    var planner = try init.gpa.dupe(u8, "heuristic");
+    defer init.gpa.free(planner);
 
     while (true) {
-        const status = if (dry_run) "ready dry-run" else "ready apply";
+        const status = try std.fmt.allocPrint(init.gpa, "{s} agent={s} mode={s} planner={s}", .{
+            if (dry_run) "ready dry-run" else "ready apply",
+            agent_filter orelse "auto",
+            mode,
+            planner,
+        });
+        defer init.gpa.free(status);
         if (fullscreen) {
             const size = tuiSize(init.environ_map);
             const screen = try openfugu.tui.renderDashboardSized(init.gpa, .{
@@ -73,6 +85,9 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :doctor  show agent health
                     \\  :agents  list runnable agents
                     \\  :dry-run toggle dry-run mode
+                    \\  :agent   set agent: auto, claude, codex, agy
+                    \\  :mode    set mode: auto, single, race, ensemble
+                    \\  :planner set planner: heuristic, subscription-agent
                     \\  :clear   clear this session
                     \\  :quit    exit
                     \\
@@ -98,6 +113,36 @@ fn repl(init: std.process.Init) !u8 {
                 last_output = try std.fmt.allocPrint(init.gpa, "dry-run={}\n", .{dry_run});
                 if (!fullscreen) try writer.interface.writeAll(last_output);
             },
+            .agent => |value| {
+                if (!validAgent(value)) {
+                    try replaceLog(init.gpa, &last_output, "invalid agent\n");
+                    continue;
+                }
+                if (agent_filter) |old| init.gpa.free(old);
+                agent_filter = if (std.mem.eql(u8, value, "auto")) null else try init.gpa.dupe(u8, value);
+                try replaceLog(init.gpa, &last_output, "agent updated\n");
+                if (!fullscreen) try writer.interface.writeAll(last_output);
+            },
+            .mode => |value| {
+                if (!validMode(value)) {
+                    try replaceLog(init.gpa, &last_output, "invalid mode\n");
+                    continue;
+                }
+                init.gpa.free(mode);
+                mode = try init.gpa.dupe(u8, value);
+                try replaceLog(init.gpa, &last_output, "mode updated\n");
+                if (!fullscreen) try writer.interface.writeAll(last_output);
+            },
+            .planner => |value| {
+                if (!validPlanner(value)) {
+                    try replaceLog(init.gpa, &last_output, "invalid planner\n");
+                    continue;
+                }
+                init.gpa.free(planner);
+                planner = try init.gpa.dupe(u8, value);
+                try replaceLog(init.gpa, &last_output, "planner updated\n");
+                if (!fullscreen) try writer.interface.writeAll(last_output);
+            },
             .task => |task| {
                 try appendHistory(init.gpa, &history, task);
                 if (fullscreen) {
@@ -113,9 +158,25 @@ fn repl(init: std.process.Init) !u8 {
                     try writer.interface.writeAll(screen);
                     try writer.interface.flush();
                 }
-                const apply_args = [_][]const u8{ "openfugu", "--explain-routing", task };
-                const dry_args = [_][]const u8{ "openfugu", "--no-apply", "--explain-routing", task };
-                var result = openfugu.cli.runWithIo(init.gpa, init.io, if (dry_run) &dry_args else &apply_args) catch |err| switch (err) {
+                var args = std.array_list.Managed([]const u8).init(init.gpa);
+                defer args.deinit();
+                try args.append("openfugu");
+                if (dry_run) try args.append("--no-apply");
+                try args.append("--explain-routing");
+                if (agent_filter) |agent| {
+                    try args.append("--agents");
+                    try args.append(agent);
+                }
+                if (!std.mem.eql(u8, mode, "auto")) {
+                    try args.append("--mode");
+                    try args.append(mode);
+                }
+                if (!std.mem.eql(u8, planner, "heuristic")) {
+                    try args.append("--planner");
+                    try args.append(planner);
+                }
+                try args.append(task);
+                var result = openfugu.cli.runWithIo(init.gpa, init.io, args.items) catch |err| switch (err) {
                     error.InvalidArgs => {
                         init.gpa.free(last_output);
                         last_output = try init.gpa.dupe(u8, "usage error\n");
@@ -180,4 +241,16 @@ fn envInt(env: *const std.process.Environ.Map, name: []const u8, fallback: u16) 
     const value = env.get(name) orelse return fallback;
     const parsed = std.fmt.parseInt(u16, value, 10) catch return fallback;
     return parsed;
+}
+
+fn validAgent(value: []const u8) bool {
+    return std.mem.eql(u8, value, "auto") or std.mem.eql(u8, value, "claude") or std.mem.eql(u8, value, "codex") or std.mem.eql(u8, value, "agy");
+}
+
+fn validMode(value: []const u8) bool {
+    return std.mem.eql(u8, value, "auto") or std.mem.eql(u8, value, "single") or std.mem.eql(u8, value, "race") or std.mem.eql(u8, value, "ensemble");
+}
+
+fn validPlanner(value: []const u8) bool {
+    return std.mem.eql(u8, value, "heuristic") or std.mem.eql(u8, value, "subscription-agent");
 }
