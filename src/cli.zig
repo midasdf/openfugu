@@ -237,7 +237,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":agents")) return .agents;
     if (std.mem.eql(u8, task, ":usage")) return .usage;
     if (std.mem.eql(u8, task, ":ledger")) return .ledger;
-    if (std.mem.eql(u8, task, ":where")) return .where_;
+    if (std.mem.eql(u8, task, ":where") or std.mem.eql(u8, task, ":pwd")) return .where_;
     if (std.mem.eql(u8, task, ":worktrees")) return .worktrees;
     if (std.mem.eql(u8, task, ":git")) return .git;
     if (std.mem.eql(u8, task, ":diff")) return .diff;

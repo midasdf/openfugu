@@ -82,6 +82,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :usage   show routing ledger summary
                     \\  :ledger  show recent ledger text
                     \\  :where   show cwd and git branch
+                    \\  :pwd     show cwd and git branch
                     \\  :worktrees show git worktrees
                     \\  :git     show git status
                     \\  :diff    show git diff stat
@@ -357,6 +358,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":usage",
         ":ledger",
         ":where",
+        ":pwd",
         ":worktrees",
         ":git",
         ":diff",
@@ -730,6 +732,7 @@ fn handleInteractiveLine(
             \\  :usage   show routing ledger summary
             \\  :ledger  show recent ledger text
             \\  :where   show cwd and git branch
+            \\  :pwd     show cwd and git branch
             \\  :worktrees show git worktrees
             \\  :git     show git status
             \\  :diff    show git diff stat
