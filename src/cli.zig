@@ -91,6 +91,7 @@ pub fn runWithProbeSpecsInRepo(
     verify_commands: []const verify.Command,
 ) !Result {
     if (args.len <= 1) return run(allocator, args);
+    if (isHelp(args[1])) return .{ .code = exit_ok, .text = try helpText(allocator) };
     if (std.mem.eql(u8, args[1], "usage")) {
         const ledger_path = try runLedgerPath(allocator, worktree_root);
         defer allocator.free(ledger_path);
@@ -146,6 +147,7 @@ pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     if (args.len <= 1) return std.fmt.allocPrint(allocator, "openfugu {s}\n", .{config.version});
 
     const cmd = args[1];
+    if (isHelp(cmd)) return helpText(allocator);
     if (std.mem.eql(u8, cmd, "plan")) {
         const plan_args = try parsePlanArgs(args);
         var plan = try heuristic.plan(allocator, .{ .request = plan_args.request });
@@ -183,9 +185,33 @@ pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     return error.InvalidArgs;
 }
 
+fn isHelp(arg: []const u8) bool {
+    return std.mem.eql(u8, arg, "help") or std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h");
+}
+
+fn helpText(allocator: std.mem.Allocator) ![]u8 {
+    return allocator.dupe(u8,
+        \\Usage: openfugu [options] "task"
+        \\
+        \\Commands:
+        \\  openfugu doctor
+        \\  openfugu agents
+        \\  openfugu usage --since 1d
+        \\  openfugu replay <run-id>
+        \\
+        \\Options:
+        \\  --no-apply          run without applying the candidate patch
+        \\  --explain-routing   print router score and selected agent
+        \\  --agents <name>     restrict execution to one agent
+        \\  --planner <name>    heuristic or subscription-agent
+        \\
+    );
+}
+
 fn taskText(args: []const []const u8) !?[]const u8 {
     if (args.len <= 1) return null;
     const cmd = args[1];
+    if (isHelp(cmd)) return null;
     if (std.mem.eql(u8, cmd, "plan")) return null;
     if (std.mem.eql(u8, cmd, "doctor")) return null;
     if (std.mem.eql(u8, cmd, "agents")) return null;

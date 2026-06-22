@@ -32,6 +32,19 @@ zig fmt --check .
 
 Zig 0.16.0 is required.
 
+## Install
+
+```sh
+zig build install -p ~/.local
+```
+
+Make sure `~/.local/bin` is on `PATH`, then run:
+
+```sh
+openfugu --help
+openfugu doctor
+```
+
 Real CLI smoke checks are opt-in because they can consume provider quota:
 
 ```sh
@@ -57,6 +70,8 @@ ledger.
 ## Usage
 
 ```sh
+openfugu --help
+
 # Run setup and dependency diagnostics
 openfugu doctor
 

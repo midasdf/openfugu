@@ -257,3 +257,12 @@ test "invalid task flags return usage errors" {
     try std.testing.expectError(error.InvalidArgs, openfugu.cli.run(std.testing.allocator, &.{ "openfugu", "--mode", "bogus", "fix" }));
     try std.testing.expectError(error.InvalidArgs, openfugu.cli.runAlloc(std.testing.allocator, &.{ "openfugu", "plan", "--planner", "bogus", "fix" }));
 }
+
+test "help prints cli usage" {
+    const help = try openfugu.cli.runAlloc(std.testing.allocator, &.{ "openfugu", "--help" });
+    defer std.testing.allocator.free(help);
+
+    try std.testing.expect(std.mem.indexOf(u8, help, "Usage: openfugu") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help, "openfugu doctor") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help, "--no-apply") != null);
+}
