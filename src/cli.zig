@@ -17,6 +17,26 @@ pub const exit_planner: u8 = 7;
 pub const exit_compat: u8 = 8;
 pub const exit_sigint: u8 = 130;
 
+pub const Result = struct {
+    code: u8,
+    text: []u8,
+
+    pub fn deinit(self: *Result, allocator: std.mem.Allocator) void {
+        allocator.free(self.text);
+        self.* = undefined;
+    }
+};
+
+pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !Result {
+    if (isTaskCommand(args)) {
+        return .{
+            .code = exit_no_agent,
+            .text = try allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n"),
+        };
+    }
+    return .{ .code = exit_ok, .text = try runAlloc(allocator, args) };
+}
+
 pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     if (args.len <= 1) return std.fmt.allocPrint(allocator, "openfugu {s}\n", .{config.version});
 
@@ -50,9 +70,20 @@ pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     }
 
     if (std.mem.startsWith(u8, cmd, "--")) {
-        return allocator.dupe(u8, "mode=auto accepted=false reason=not-run no-apply=false\n");
+        return allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n");
     }
-    return allocator.dupe(u8, "mode=auto accepted=false reason=not-run\n");
+    return allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n");
+}
+
+fn isTaskCommand(args: []const []const u8) bool {
+    if (args.len <= 1) return false;
+    const cmd = args[1];
+    if (std.mem.eql(u8, cmd, "plan")) return false;
+    if (std.mem.eql(u8, cmd, "doctor")) return false;
+    if (std.mem.eql(u8, cmd, "agents")) return false;
+    if (std.mem.eql(u8, cmd, "usage")) return false;
+    if (std.mem.eql(u8, cmd, "replay")) return false;
+    return true;
 }
 
 fn defaultAgentReports() []const probe.AgentReport {

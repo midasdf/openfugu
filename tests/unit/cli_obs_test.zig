@@ -60,3 +60,19 @@ test "recovery reports clean state when no process worktree branch or lock remai
     });
     try std.testing.expect(result.clean);
 }
+
+test "task execution without runnable subscription agent returns exit 3" {
+    var result = try openfugu.cli.run(std.testing.allocator, &.{ "openfugu", "fix the bug" });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(openfugu.cli.exit_no_agent, result.code);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "no subscription-compatible agent") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "not-run") == null);
+}
+
+test "mode flags still fail closed when no agent is runnable" {
+    var result = try openfugu.cli.run(std.testing.allocator, &.{ "openfugu", "--mode", "single", "fix the bug" });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(openfugu.cli.exit_no_agent, result.code);
+}
