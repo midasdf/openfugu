@@ -32,7 +32,7 @@ pub const Result = struct {
 };
 
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !Result {
-    if (isTaskCommand(args)) {
+    if (try taskText(args) != null) {
         return .{
             .code = exit_no_agent,
             .text = try allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n"),
@@ -69,7 +69,7 @@ pub fn runWithProbeSpecs(
         }
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
-    if (isTaskCommand(args)) {
+    if (try taskText(args) != null) {
         return runFirstRunnableSpec(allocator, io, specs);
     }
     return run(allocator, args);
@@ -107,21 +107,41 @@ pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
         return replay.fixture(allocator, args[2]);
     }
 
-    if (std.mem.startsWith(u8, cmd, "--")) {
+    if (try taskText(args) != null) {
         return allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n");
     }
-    return allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n");
+    return error.InvalidArgs;
 }
 
-fn isTaskCommand(args: []const []const u8) bool {
-    if (args.len <= 1) return false;
+fn taskText(args: []const []const u8) !?[]const u8 {
+    if (args.len <= 1) return null;
     const cmd = args[1];
-    if (std.mem.eql(u8, cmd, "plan")) return false;
-    if (std.mem.eql(u8, cmd, "doctor")) return false;
-    if (std.mem.eql(u8, cmd, "agents")) return false;
-    if (std.mem.eql(u8, cmd, "usage")) return false;
-    if (std.mem.eql(u8, cmd, "replay")) return false;
-    return true;
+    if (std.mem.eql(u8, cmd, "plan")) return null;
+    if (std.mem.eql(u8, cmd, "doctor")) return null;
+    if (std.mem.eql(u8, cmd, "agents")) return null;
+    if (std.mem.eql(u8, cmd, "usage")) return null;
+    if (std.mem.eql(u8, cmd, "replay")) return null;
+
+    var i: usize = 1;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--subscription-only") or std.mem.eql(u8, arg, "--no-apply")) continue;
+        if (takesValue(arg)) {
+            i += 1;
+            if (i >= args.len) return error.InvalidArgs;
+            continue;
+        }
+        if (std.mem.startsWith(u8, arg, "--")) return error.InvalidArgs;
+        return arg;
+    }
+    return error.InvalidArgs;
+}
+
+fn takesValue(arg: []const u8) bool {
+    return std.mem.eql(u8, arg, "--mode") or
+        std.mem.eql(u8, arg, "--agents") or
+        std.mem.eql(u8, arg, "--planner") or
+        std.mem.eql(u8, arg, "--depth");
 }
 
 fn defaultAgentReports() []const probe.AgentReport {
