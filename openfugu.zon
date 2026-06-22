@@ -1,0 +1,8 @@
+.{
+    .subscription = .{
+        .only = true,
+        .reject_api_key_auth = true,
+        .strip_known_api_key_env = true,
+        .unknown_auth = .disable,
+    },
+}
