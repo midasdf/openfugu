@@ -81,6 +81,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :usage   show routing ledger summary
                     \\  :git     show git status
                     \\  :diff    show git diff stat
+                    \\  :patch   show git patch
                     \\  :verify  run local verification
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
@@ -118,6 +119,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .diff => {
                 try runGitDiff(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .patch => {
+                try runGitPatch(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .verify => {
@@ -252,6 +257,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":usage",
         ":git",
         ":diff",
+        ":patch",
         ":verify",
         ":dry-run",
         ":no-apply",
@@ -491,6 +497,7 @@ fn handleInteractiveLine(
             \\  :usage   show routing ledger summary
             \\  :git     show git status
             \\  :diff    show git diff stat
+            \\  :patch   show git patch
             \\  :verify  run local verification
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
@@ -515,6 +522,7 @@ fn handleInteractiveLine(
         .usage => try runInteractiveCommand(init, last_output, &.{ "openfugu", "usage" }, ":usage"),
         .git => try runGitStatus(init, last_output),
         .diff => try runGitDiff(init, last_output),
+        .patch => try runGitPatch(init, last_output),
         .verify => try runLocalVerify(init, last_output),
         .status => try replaceStatusLog(init.gpa, last_output, dry_run.*, agent_filter.*, mode.*, planner.*, job.* != null),
         .reset_routing => {
@@ -658,6 +666,10 @@ fn runGitStatus(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitDiff(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":diff", &.{ "git", "diff", "--stat" }, "no diff\n");
+}
+
+fn runGitPatch(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":patch", &.{ "git", "diff", "--no-ext-diff" }, "no patch\n");
 }
 
 fn runGitCommand(init: std.process.Init, log: *[]u8, label: []const u8, argv: []const []const u8, empty_text: []const u8) !void {
