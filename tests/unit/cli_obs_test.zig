@@ -298,6 +298,7 @@ test "interactive input classifies prompt lines" {
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.git, openfugu.cli.interactiveInput(":git\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.log, openfugu.cli.interactiveInput(":log\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.diff, openfugu.cli.interactiveInput(":diff\n"));
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.staged, openfugu.cli.interactiveInput(":staged\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.patch, openfugu.cli.interactiveInput(":patch\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.verify, openfugu.cli.interactiveInput(":verify\n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.build, openfugu.cli.interactiveInput(":build\n"));

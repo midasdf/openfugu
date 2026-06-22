@@ -91,6 +91,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :git     show git status
                     \\  :log     show recent commits
                     \\  :diff    show git diff stat
+                    \\  :staged  show staged diff stat
                     \\  :patch   show git patch
                     \\  :verify  run local verification
                     \\  :build   run build
@@ -164,6 +165,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .diff => {
                 try runGitDiff(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .staged => {
+                try runGitStaged(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .patch => {
@@ -419,6 +424,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":git",
         ":log",
         ":diff",
+        ":staged",
         ":patch",
         ":verify",
         ":build",
@@ -806,6 +812,7 @@ fn handleInteractiveLine(
             \\  :git     show git status
             \\  :log     show recent commits
             \\  :diff    show git diff stat
+            \\  :staged  show staged diff stat
             \\  :patch   show git patch
             \\  :verify  run local verification
             \\  :build   run build
@@ -854,6 +861,7 @@ fn handleInteractiveLine(
         .git => try runGitStatus(init, last_output),
         .log => try runGitLog(init, last_output),
         .diff => try runGitDiff(init, last_output),
+        .staged => try runGitStaged(init, last_output),
         .patch => try runGitPatch(init, last_output),
         .verify => try runLocalVerify(init, last_output),
         .build => try runLocalBuild(init, last_output),
@@ -1187,6 +1195,10 @@ fn runGitLog(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitDiff(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":diff", &.{ "git", "diff", "--stat" }, "no diff\n");
+}
+
+fn runGitStaged(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":staged", &.{ "git", "diff", "--cached", "--stat" }, "no staged diff\n");
 }
 
 fn runGitPatch(init: std.process.Init, log: *[]u8) !void {

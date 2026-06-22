@@ -205,6 +205,7 @@ pub const InteractiveInput = union(enum) {
     git,
     log,
     diff,
+    staged,
     patch,
     verify,
     build,
@@ -253,6 +254,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":git")) return .git;
     if (std.mem.eql(u8, task, ":log")) return .log;
     if (std.mem.eql(u8, task, ":diff")) return .diff;
+    if (std.mem.eql(u8, task, ":staged")) return .staged;
     if (std.mem.eql(u8, task, ":patch")) return .patch;
     if (std.mem.eql(u8, task, ":verify")) return .verify;
     if (std.mem.eql(u8, task, ":build")) return .build;
