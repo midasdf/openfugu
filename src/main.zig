@@ -78,6 +78,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :agents  list runnable agents
                     \\  :usage   show routing ledger summary
                     \\  :git     show git status
+                    \\  :verify  run local verification
                     \\  :dry-run toggle dry-run mode
                     \\  :apply   return to apply mode
                     \\  :agent   set agent: auto, claude, codex, agy
@@ -109,6 +110,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .git => {
                 try runGitStatus(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .verify => {
+                try runLocalVerify(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .status => {
@@ -223,6 +228,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":agents",
         ":usage",
         ":git",
+        ":verify",
         ":dry-run",
         ":apply",
         ":agent auto",
@@ -457,6 +463,7 @@ fn handleInteractiveLine(
             \\  :agents  list runnable agents
             \\  :usage   show routing ledger summary
             \\  :git     show git status
+            \\  :verify  run local verification
             \\  :dry-run toggle dry-run mode
             \\  :apply   return to apply mode
             \\  :agent   set agent: auto, claude, codex, agy
@@ -478,6 +485,7 @@ fn handleInteractiveLine(
         },
         .usage => try runInteractiveCommand(init, last_output, &.{ "openfugu", "usage" }, ":usage"),
         .git => try runGitStatus(init, last_output),
+        .verify => try runLocalVerify(init, last_output),
         .status => try replaceStatusLog(init.gpa, last_output, dry_run.*, agent_filter.*, mode.*, planner.*, job.* != null),
         .reset_routing => {
             try resetRouting(init.gpa, dry_run, agent_filter, mode, planner);
@@ -625,6 +633,26 @@ fn runGitStatus(init: std.process.Init, log: *[]u8) !void {
     defer result.deinit(init.gpa);
     const text = if (result.exit_code == 0) result.stdout_tail else result.stderr_tail;
     try appendLog(init.gpa, log, ":git", if (text.len == 0) "clean\n" else text);
+}
+
+fn runLocalVerify(init: std.process.Init, log: *[]u8) !void {
+    var verification = try openfugu.verify.run(init.gpa, init.io, ".", &.{
+        .{ .name = "build", .argv = &.{ "zig", "build" } },
+        .{ .name = "test", .argv = &.{ "zig", "build", "test" } },
+    });
+    defer verification.deinit(init.gpa);
+
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(init.gpa);
+    try out.print(init.gpa, "passed={}\n", .{verification.passed});
+    for (verification.commands) |command| {
+        try out.print(init.gpa, "{s} exit={?}\n", .{ command.name, command.exit_code });
+        if (command.stdout_tail.len != 0) try out.appendSlice(init.gpa, command.stdout_tail);
+        if (command.stderr_tail.len != 0) try out.appendSlice(init.gpa, command.stderr_tail);
+    }
+    const text = try out.toOwnedSlice(init.gpa);
+    defer init.gpa.free(text);
+    try appendLog(init.gpa, log, ":verify", text);
 }
 
 fn runRoutePreview(
