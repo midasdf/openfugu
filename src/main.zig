@@ -365,7 +365,9 @@ fn showFile(init: std.process.Init, log: *[]u8, path: []const u8) !void {
         return;
     };
     defer init.gpa.free(text);
-    try appendLog(init.gpa, log, path, text);
+    const numbered = try openfugu.cli.numberedLines(init.gpa, text);
+    defer init.gpa.free(numbered);
+    try appendLog(init.gpa, log, path, numbered);
 }
 
 fn rawRepl(init: std.process.Init) !u8 {

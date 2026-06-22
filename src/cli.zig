@@ -289,6 +289,19 @@ fn commandValue(input: []const u8, command: []const u8) ?[]const u8 {
     return value;
 }
 
+pub fn numberedLines(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var line_no: usize = 1;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0 and lines.peek() == null) break;
+        try out.print(allocator, "{d:4} | {s}\n", .{ line_no, line });
+        line_no += 1;
+    }
+    return out.toOwnedSlice(allocator);
+}
+
 fn helpText(allocator: std.mem.Allocator) ![]u8 {
     return allocator.dupe(u8,
         \\Usage: openfugu [options] "task"
