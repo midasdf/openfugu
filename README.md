@@ -33,4 +33,10 @@ Real CLI smoke checks are opt-in because they can consume provider quota:
 zig build smoke -Dreal-cli-tests=true
 ```
 
+Model-invoking task smoke checks require a second opt-in:
+
+```sh
+zig build smoke -Dreal-cli-tests=true -Dreal-cli-task-tests=true
+```
+
 The normal test suite uses fake agents and temporary git repositories only.
