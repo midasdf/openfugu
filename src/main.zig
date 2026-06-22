@@ -92,6 +92,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :save    save current output to file
                     \\  :run     run shell command
                     \\  :cwd     change working directory
+                    \\  :load    run task text from file
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
@@ -197,6 +198,18 @@ fn repl(init: std.process.Init) !u8 {
                 try changeCwd(init, &last_output, path);
                 try writer.interface.writeAll(last_output);
             },
+            .load => |path| {
+                const text = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024));
+                defer init.gpa.free(text);
+                const task = std.mem.trim(u8, text, " \t\r\n");
+                if (task.len == 0) {
+                    try replaceLog(init.gpa, &last_output, "empty task file\n");
+                    try writer.interface.writeAll(last_output);
+                    continue;
+                }
+                try runReplTask(init, &last_output, &history, task, dry_run, agent_filter, mode, planner);
+                try writer.interface.writeAll(last_output);
+            },
             .plan => |task| {
                 try runPlanPreview(init, &last_output, task, planner);
                 try writer.interface.writeAll(last_output);
@@ -240,44 +253,55 @@ fn repl(init: std.process.Init) !u8 {
                 try writer.interface.writeAll(last_output);
             },
             .task => |task| {
-                try appendHistory(init.gpa, &history, task);
-                var args = std.array_list.Managed([]const u8).init(init.gpa);
-                defer args.deinit();
-                try args.append("openfugu");
-                if (dry_run) try args.append("--no-apply");
-                try args.append("--explain-routing");
-                if (agent_filter) |agent| {
-                    try args.append("--agents");
-                    try args.append(agent);
-                }
-                if (!std.mem.eql(u8, mode, "auto")) {
-                    try args.append("--mode");
-                    try args.append(mode);
-                }
-                if (!std.mem.eql(u8, planner, "heuristic")) {
-                    try args.append("--planner");
-                    try args.append(planner);
-                }
-                try args.append(task);
-                var result = openfugu.cli.runWithIo(init.gpa, init.io, args.items) catch |err| switch (err) {
-                    error.InvalidArgs => {
-                        init.gpa.free(last_output);
-                        last_output = try init.gpa.dupe(u8, "usage error\n");
-                        continue;
-                    },
-                    else => {
-                        init.gpa.free(last_output);
-                        last_output = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
-                        continue;
-                    },
-                };
-                defer result.deinit(init.gpa);
-                try appendLog(init.gpa, &last_output, task, result.text);
-                try writer.interface.writeAll(result.text);
+                try runReplTask(init, &last_output, &history, task, dry_run, agent_filter, mode, planner);
+                try writer.interface.writeAll(last_output);
             },
         }
     }
     return openfugu.cli.exit_ok;
+}
+
+fn runReplTask(
+    init: std.process.Init,
+    last_output: *[]u8,
+    history: *[]u8,
+    task: []const u8,
+    dry_run: bool,
+    agent_filter: ?[]const u8,
+    mode: []const u8,
+    planner: []const u8,
+) !void {
+    try appendHistory(init.gpa, history, task);
+    var args = std.array_list.Managed([]const u8).init(init.gpa);
+    defer args.deinit();
+    try args.append("openfugu");
+    if (dry_run) try args.append("--no-apply");
+    try args.append("--explain-routing");
+    if (agent_filter) |agent| {
+        try args.append("--agents");
+        try args.append(agent);
+    }
+    if (!std.mem.eql(u8, mode, "auto")) {
+        try args.append("--mode");
+        try args.append(mode);
+    }
+    if (!std.mem.eql(u8, planner, "heuristic")) {
+        try args.append("--planner");
+        try args.append(planner);
+    }
+    try args.append(task);
+    var result = openfugu.cli.runWithIo(init.gpa, init.io, args.items) catch |err| {
+        if (err == error.InvalidArgs) {
+            try replaceLog(init.gpa, last_output, "usage error\n");
+            return;
+        }
+        const text = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+        defer init.gpa.free(text);
+        try replaceLog(init.gpa, last_output, text);
+        return;
+    };
+    defer result.deinit(init.gpa);
+    try appendLog(init.gpa, last_output, task, result.text);
 }
 
 fn rawRepl(init: std.process.Init) !u8 {
@@ -310,6 +334,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":save ",
         ":run ",
         ":cwd ",
+        ":load ",
         ":dry-run",
         ":no-apply",
         ":apply",
@@ -672,6 +697,7 @@ fn handleInteractiveLine(
             \\  :save    save current output to file
             \\  :run     run shell command
             \\  :cwd     change working directory
+            \\  :load    run task text from file
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
@@ -746,6 +772,16 @@ fn handleInteractiveLine(
             }
             try changeCwd(init, last_output, path);
         },
+        .load => |path| {
+            const text = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024));
+            defer init.gpa.free(text);
+            const task = std.mem.trim(u8, text, " \t\r\n");
+            if (task.len == 0) {
+                try replaceLog(init.gpa, last_output, "empty task file\n");
+                return false;
+            }
+            try startOpenfuguTask(init, task, last_output, agents, history, dry_run, agent_filter, mode, planner, term, job);
+        },
         .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
         .replay => |run_id| try runReplay(init, last_output, run_id),
@@ -777,35 +813,51 @@ fn handleInteractiveLine(
             try replaceLog(init.gpa, last_output, "planner updated\n");
         },
         .task => |task| {
-            if (job.* != null) {
-                try replaceLog(init.gpa, last_output, "task already running\n");
-                return false;
-            }
-            try appendHistory(init.gpa, history, task);
-            try drawRaw(init, term, task, last_output.*, agents.*, history.*, dry_run.*, agent_filter.*, mode.*, planner.*, task, null);
-            var args = std.array_list.Managed([]const u8).init(init.gpa);
-            defer args.deinit();
-            try args.append("openfugu");
-            if (dry_run.*) try args.append("--no-apply");
-            try args.append("--explain-routing");
-            if (agent_filter.*) |agent| {
-                try args.append("--agents");
-                try args.append(agent);
-            }
-            if (!std.mem.eql(u8, mode.*, "auto")) {
-                try args.append("--mode");
-                try args.append(mode.*);
-            }
-            if (!std.mem.eql(u8, planner.*, "heuristic")) {
-                try args.append("--planner");
-                try args.append(planner.*);
-            }
-            try args.append(task);
-            job.* = try startTaskJob(init.gpa, init.io, args.items, task, true);
-            try replaceLog(init.gpa, last_output, "task running\n");
+            try startOpenfuguTask(init, task, last_output, agents, history, dry_run, agent_filter, mode, planner, term, job);
         },
     }
     return false;
+}
+
+fn startOpenfuguTask(
+    init: std.process.Init,
+    task: []const u8,
+    last_output: *[]u8,
+    agents: *[]u8,
+    history: *[]u8,
+    dry_run: *bool,
+    agent_filter: *?[]u8,
+    mode: *[]u8,
+    planner: *[]u8,
+    term: *zz.Terminal,
+    job: *?*TaskJob,
+) !void {
+    if (job.* != null) {
+        try replaceLog(init.gpa, last_output, "task already running\n");
+        return;
+    }
+    try appendHistory(init.gpa, history, task);
+    try drawRaw(init, term, task, last_output.*, agents.*, history.*, dry_run.*, agent_filter.*, mode.*, planner.*, task, null);
+    var args = std.array_list.Managed([]const u8).init(init.gpa);
+    defer args.deinit();
+    try args.append("openfugu");
+    if (dry_run.*) try args.append("--no-apply");
+    try args.append("--explain-routing");
+    if (agent_filter.*) |agent| {
+        try args.append("--agents");
+        try args.append(agent);
+    }
+    if (!std.mem.eql(u8, mode.*, "auto")) {
+        try args.append("--mode");
+        try args.append(mode.*);
+    }
+    if (!std.mem.eql(u8, planner.*, "heuristic")) {
+        try args.append("--planner");
+        try args.append(planner.*);
+    }
+    try args.append(task);
+    job.* = try startTaskJob(init.gpa, init.io, args.items, task, true);
+    try replaceLog(init.gpa, last_output, "task running\n");
 }
 
 fn startTaskJob(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8, label: []const u8, replace_with_self: bool) !*TaskJob {

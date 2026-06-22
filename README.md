@@ -91,7 +91,7 @@ the output top or bottom, or type `:quit` to exit.
 Input history is stored in `.openfugu/tui-history`.
 The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:ledger`,
 `:where`, `:worktrees`, `:git`, `:diff`, `:patch`, `:verify`, `:cancel`,
-`:rerun`, `:save <file>`, `:run <command>`, `:cwd <path>`, `:dry-run`, `:no-apply`, `:apply`,
+`:rerun`, `:save <file>`, `:run <command>`, `:cwd <path>`, `:load <file>`, `:dry-run`, `:no-apply`, `:apply`,
 `:agent <name>`, `:mode <name>`, `:planner <name>`, `:reset-routing`,
 `:plan <task>`, `:route <task>`, `:replay <run-id>`, `:clear`, and
 `:clear-history`.
