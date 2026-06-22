@@ -90,8 +90,10 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :mode    set mode: auto, single, race, ensemble
                     \\  :planner set planner: heuristic, subscription-agent
                     \\  :clear   clear this session
-                    \\  :clear-history clear task history
+                    \\  :clear-history clear input and task history
                     \\  :quit    exit
+                    \\
+                    \\Keys: Up/Down input history, PageUp/PageDown output pane.
                     \\
                     \\Type any other line to route and execute it.
                     \\
@@ -513,8 +515,10 @@ fn handleInteractiveLine(
             \\  :mode    set mode: auto, single, race, ensemble
             \\  :planner set planner: heuristic, subscription-agent
             \\  :clear   clear this session
-            \\  :clear-history clear task history
+            \\  :clear-history clear input and task history
             \\  :quit    exit
+            \\
+            \\Keys: Up/Down input history, PageUp/PageDown output pane.
             \\
             \\Type any other line to route and execute it.
             \\
