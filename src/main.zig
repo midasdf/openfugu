@@ -73,6 +73,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\Commands:
                     \\  :status  show current routing state
                     \\  :reset-routing reset routing to defaults
+                    \\  :route   preview routing without running
                     \\  :doctor  show agent health
                     \\  :agents  list runnable agents
                     \\  :dry-run toggle dry-run mode
@@ -118,6 +119,10 @@ fn repl(init: std.process.Init) !u8 {
             .apply => {
                 dry_run = false;
                 try replaceLog(init.gpa, &last_output, "apply=true\n");
+                try writer.interface.writeAll(last_output);
+            },
+            .route => |task| {
+                try runRoutePreview(init, &last_output, task, agent_filter, mode, planner);
                 try writer.interface.writeAll(last_output);
             },
             .agent => |value| {
@@ -198,12 +203,12 @@ fn rawRepl(init: std.process.Init) !u8 {
 
     var input = zz.components.TextInput.init(init.gpa);
     defer input.deinit();
-    input.setPlaceholder("type a task or :help");
     input.setCharLimit(4096);
     input.setSuggestions(&.{
         ":help",
         ":status",
         ":reset-routing",
+        ":route ",
         ":doctor",
         ":agents",
         ":dry-run",
@@ -435,6 +440,7 @@ fn handleInteractiveLine(
             \\Commands:
             \\  :status  show current routing state
             \\  :reset-routing reset routing to defaults
+            \\  :route   preview routing without running
             \\  :doctor  show agent health
             \\  :agents  list runnable agents
             \\  :dry-run toggle dry-run mode
@@ -470,6 +476,7 @@ fn handleInteractiveLine(
             dry_run.* = false;
             try replaceLog(init.gpa, last_output, "apply=true\n");
         },
+        .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
         .agent => |value| {
             if (!validAgent(value)) {
                 try replaceLog(init.gpa, last_output, "invalid agent\n");
@@ -583,6 +590,36 @@ fn runInteractiveCommand(init: std.process.Init, log: *[]u8, args: []const []con
     const text = try runCommandText(init, args);
     defer init.gpa.free(text);
     try appendLog(init.gpa, log, label, text);
+}
+
+fn runRoutePreview(
+    init: std.process.Init,
+    log: *[]u8,
+    task: []const u8,
+    agent_filter: ?[]const u8,
+    mode: []const u8,
+    planner: []const u8,
+) !void {
+    var args = std.array_list.Managed([]const u8).init(init.gpa);
+    defer args.deinit();
+    try args.append("openfugu");
+    try args.append("--route-only");
+    if (agent_filter) |agent| {
+        try args.append("--agents");
+        try args.append(agent);
+    }
+    if (!std.mem.eql(u8, mode, "auto")) {
+        try args.append("--mode");
+        try args.append(mode);
+    }
+    if (!std.mem.eql(u8, planner, "heuristic")) {
+        try args.append("--planner");
+        try args.append(planner);
+    }
+    try args.append(task);
+    const text = try runCommandText(init, args.items);
+    defer init.gpa.free(text);
+    try appendLog(init.gpa, log, task, text);
 }
 
 fn runCommandText(init: std.process.Init, args: []const []const u8) ![]u8 {

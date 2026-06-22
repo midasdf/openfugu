@@ -89,4 +89,4 @@ route and execute it, press Tab to accept command suggestions, use Up/Down for
 task history, or type `:quit` to exit.
 The TUI also accepts `:status`, `:doctor`, `:agents`, `:dry-run`, `:apply`,
 `:agent <name>`, `:mode <name>`, `:planner <name>`, `:reset-routing`,
-`:clear`, and `:clear-history`.
+`:route <task>`, `:clear`, and `:clear-history`.

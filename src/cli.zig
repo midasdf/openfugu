@@ -138,7 +138,7 @@ pub fn runWithProbeSpecsInRepo(
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
     if (try taskText(args)) |task| {
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), hasFlag(args, "--route-only"));
     }
     return run(allocator, args);
 }
@@ -201,6 +201,7 @@ pub const InteractiveInput = union(enum) {
     reset_routing,
     dry_run,
     apply,
+    route: []const u8,
     agent: []const u8,
     mode: []const u8,
     planner: []const u8,
@@ -220,6 +221,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":reset-routing")) return .reset_routing;
     if (std.mem.eql(u8, task, ":dry-run")) return .dry_run;
     if (std.mem.eql(u8, task, ":apply")) return .apply;
+    if (commandValue(task, ":route")) |value| return .{ .route = value };
     if (commandValue(task, ":agent")) |value| return .{ .agent = value };
     if (commandValue(task, ":mode")) |value| return .{ .mode = value };
     if (commandValue(task, ":planner")) |value| return .{ .planner = value };
@@ -251,6 +253,7 @@ fn helpText(allocator: std.mem.Allocator) ![]u8 {
         \\Options:
         \\  --no-apply          run without applying the candidate patch
         \\  --explain-routing   print router score and selected agent
+        \\  --route-only        print router score without executing an agent
         \\  --agents <name>     restrict execution to one agent
         \\  --planner <name>    heuristic or subscription-agent
         \\
@@ -274,6 +277,7 @@ fn taskText(args: []const []const u8) !?[]const u8 {
             std.mem.eql(u8, arg, "--no-apply") or
             std.mem.eql(u8, arg, "--require-model-review") or
             std.mem.eql(u8, arg, "--reject-model-review") or
+            std.mem.eql(u8, arg, "--route-only") or
             std.mem.eql(u8, arg, "--explain-routing")) continue;
         if (takesValue(arg)) {
             i += 1;
@@ -427,6 +431,7 @@ fn runFirstRunnableSpec(
     review: model_review.Review,
     cooldown_filter: ?[]const u8,
     explain_routing: bool,
+    route_only: bool,
 ) !Result {
     try std.Io.Dir.cwd().createDirPath(io, worktree_root);
     var candidates = try allocator.alloc(RoutingCandidate, specs.len);
@@ -475,6 +480,34 @@ fn runFirstRunnableSpec(
         });
     }
     sortRoutingCandidates(candidates[0..candidate_count]);
+
+    if (route_only) {
+        if (candidate_count == 0) {
+            return .{
+                .code = exit_no_agent,
+                .text = try allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n"),
+            };
+        }
+        const candidate = candidates[0];
+        return .{
+            .code = exit_ok,
+            .text = try std.fmt.allocPrint(allocator,
+                \\router={s}
+                \\route={s}
+                \\preferred={s}
+                \\score={d}
+                \\agent={s}
+                \\execute=false
+                \\
+            , .{
+                router_name,
+                @tagName(kind),
+                @tagName(preferred_agent),
+                candidate.score,
+                candidate.report.name,
+            }),
+        };
+    }
 
     for (candidates[0..candidate_count]) |*candidate| {
         const candidate_path = try candidateWorktreePath(allocator, io, worktree_root, candidate.report.name);
