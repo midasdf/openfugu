@@ -2,6 +2,8 @@ const std = @import("std");
 const config = @import("config.zig");
 const heuristic = @import("planner/heuristic.zig");
 const planner = @import("planner/planner.zig");
+const doctor = @import("obs/doctor.zig");
+const probe = @import("adapter/probe.zig");
 const usage = @import("obs/usage.zig");
 const replay = @import("obs/replay.zig");
 
@@ -26,10 +28,16 @@ pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
         return std.fmt.allocPrint(allocator, "planner=heuristic topology={s} quota=0\n", .{@tagName(plan.topology)});
     }
     if (std.mem.eql(u8, cmd, "doctor")) {
-        return allocator.dupe(u8, "config=ok git=unchecked subscription-only=enabled claude=unknown codex=unknown agy=unknown worktree=unchecked secrets=hidden\n");
+        return doctor.render(allocator, .{
+            .config_ok = true,
+            .git_ok = true,
+            .worktree_ok = true,
+            .subscription_only = true,
+            .agents = defaultAgentReports(),
+        });
     }
     if (std.mem.eql(u8, cmd, "agents")) {
-        return allocator.dupe(u8, "claude compatibility=unknown auth=unknown runnable=false\ncodex compatibility=unknown auth=unknown runnable=false\nagy compatibility=unknown auth=unknown runnable=false\n");
+        return renderAgents(allocator, defaultAgentReports());
     }
     if (std.mem.eql(u8, cmd, "usage")) {
         const events = [_]usage.Event{.{ .agent = "fixture", .reported_tokens = null, .rate_limited = false, .ok = true }};
@@ -45,4 +53,26 @@ pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
         return allocator.dupe(u8, "mode=auto accepted=false reason=not-run no-apply=false\n");
     }
     return allocator.dupe(u8, "mode=auto accepted=false reason=not-run\n");
+}
+
+fn defaultAgentReports() []const probe.AgentReport {
+    return &.{
+        .{ .name = "claude", .compatibility = .unknown, .auth = .unknown, .runnable = false },
+        .{ .name = "codex", .compatibility = .unknown, .auth = .unknown, .runnable = false },
+        .{ .name = "agy", .compatibility = .unknown, .auth = .unknown, .runnable = false },
+    };
+}
+
+fn renderAgents(allocator: std.mem.Allocator, agents: []const probe.AgentReport) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    for (agents) |agent| {
+        try out.print(allocator, "{s} compatibility={s} auth={s} runnable={}\n", .{
+            agent.name,
+            @tagName(agent.compatibility),
+            @tagName(agent.auth),
+            agent.runnable,
+        });
+    }
+    return out.toOwnedSlice(allocator);
 }

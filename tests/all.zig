@@ -7,4 +7,5 @@ test {
     _ = @import("unit/quota_policy_test.zig");
     _ = @import("unit/refinement_test.zig");
     _ = @import("unit/cli_obs_test.zig");
+    _ = @import("unit/config_doctor_test.zig");
 }
