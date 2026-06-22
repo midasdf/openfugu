@@ -1,6 +1,7 @@
 const std = @import("std");
 const protocol = @import("../adapter/protocol.zig");
 const session = @import("session.zig");
+const types = @import("../core/types.zig");
 
 pub const RunSpec = struct {
     executable: []const u8,
@@ -84,12 +85,30 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, spec: RunSpec) !RunResult {
     };
 }
 
+pub fn runInvocation(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    invocation: types.Invocation,
+    timeout_ms: u64,
+) !RunResult {
+    return run(allocator, io, .{
+        .executable = invocation.executable,
+        .argv = invocation.argv,
+        .cwd = invocation.cwd,
+        .timeout_ms = timeoutFromUnsignedMs(timeout_ms),
+    });
+}
+
 fn timeoutFromMs(timeout_ms: ?i64) std.Io.Timeout {
     const ms = timeout_ms orelse return .none;
     return .{ .duration = .{
         .raw = std.Io.Duration.fromMilliseconds(ms),
         .clock = .awake,
     } };
+}
+
+fn timeoutFromUnsignedMs(timeout_ms: u64) i64 {
+    return @intCast(@min(timeout_ms, @as(u64, @intCast(std.math.maxInt(i64)))));
 }
 
 fn tail(allocator: std.mem.Allocator, bytes: []const u8, max: usize) ![]u8 {

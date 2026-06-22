@@ -87,3 +87,23 @@ test "signal cancellation terminates process group and reaps child" {
     try std.testing.expect(result.reaped);
     try std.testing.expect(result.canceled);
 }
+
+test "runner executes invocation through argv without shell" {
+    const fake_agent = test_options.fake_agent_path;
+    const argv = [_][]const u8{ fake_agent, "literal;not-shell" };
+
+    var result = try openfugu.runner.runInvocation(std.testing.allocator, std.testing.io, .{
+        .executable = fake_agent,
+        .argv = &argv,
+        .cwd = ".",
+        .stdin = "",
+        .env_policy = .inherit_filtered,
+        .transport = .stdio,
+        .output_format = .text,
+    }, 1000);
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(u8, 0), result.exit_code.?);
+    try std.testing.expect(std.mem.indexOf(u8, result.stdout_tail, "fake out") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr_tail, "fake err") != null);
+}
