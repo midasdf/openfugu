@@ -369,3 +369,30 @@ test "tui dashboard can show output from top" {
     try std.testing.expect(std.mem.indexOf(u8, top_screen, "top-line") != null);
     try std.testing.expect(std.mem.indexOf(u8, bottom_screen, "bottom-line") != null);
 }
+
+test "tui dashboard accepts output offset" {
+    const output =
+        \\line-0
+        \\line-1
+        \\line-2
+        \\line-3
+        \\line-4
+        \\line-5
+        \\line-6
+        \\line-7
+        \\
+    ;
+    const screen = try openfugu.tui.renderDashboardSized(std.testing.allocator, .{
+        .status = "ready apply",
+        .input = "",
+        .output = output,
+        .output_bottom = false,
+        .output_offset = 2,
+        .agents = "claude runnable\n",
+        .history = "No tasks yet.\n",
+    }, 80, 14);
+    defer std.testing.allocator.free(screen);
+
+    try std.testing.expect(std.mem.indexOf(u8, screen, "line-2") != null);
+    try std.testing.expect(std.mem.indexOf(u8, screen, "line-7") == null);
+}

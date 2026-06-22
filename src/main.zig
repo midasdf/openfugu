@@ -300,7 +300,7 @@ fn rawRepl(init: std.process.Init) !u8 {
     defer init.gpa.free(planner);
     // ponytail: one foreground task; add a queue/cancel path when parallel TUI work matters.
     var job: ?*TaskJob = null;
-    var output_bottom = true;
+    var output_offset: ?usize = null;
     // ponytail: quitting detaches the one worker; process exit reclaims it.
     defer if (job) |running_job| running_job.thread.detach();
 
@@ -311,14 +311,14 @@ fn rawRepl(init: std.process.Init) !u8 {
                     init.gpa.free(last_output);
                     last_output = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
                 };
-                output_bottom = true;
+                output_offset = null;
                 job = null;
             }
         }
 
         const input_view = try input.view(init.gpa);
         defer init.gpa.free(input_view);
-        try drawRaw(init, &term, input_view, last_output, agents, history, dry_run, agent_filter, mode, planner, job != null, output_bottom);
+        try drawRaw(init, &term, input_view, last_output, agents, history, dry_run, agent_filter, mode, planner, job != null, output_offset);
 
         var input_buf: [256]u8 = undefined;
         const read = try term.readInput(&input_buf, if (job == null) -1 else 100);
@@ -349,8 +349,8 @@ fn rawRepl(init: std.process.Init) !u8 {
                         }
                     }
                 },
-                .page_up => output_bottom = false,
-                .page_down => output_bottom = true,
+                .page_up => output_offset = pageOutputUp(init, &term, last_output, output_offset),
+                .page_down => output_offset = pageOutputDown(init, &term, last_output, output_offset),
                 .enter => {
                     const line = try init.gpa.dupe(u8, input.getValue());
                     defer init.gpa.free(line);
@@ -365,7 +365,7 @@ fn rawRepl(init: std.process.Init) !u8 {
                         else => try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n"))),
                     }
                     const should_quit = try handleInteractiveLine(init, line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
-                    output_bottom = true;
+                    output_offset = null;
                     if (should_quit) return openfugu.cli.exit_ok;
                 },
                 else => input.handleKey(key),
@@ -391,6 +391,36 @@ const TaskJob = struct {
     }
 };
 
+fn pageOutputUp(init: std.process.Init, term: *zz.Terminal, output: []const u8, current: ?usize) ?usize {
+    const page_rows = outputPageRows(init, term);
+    const total_rows = outputLineRows(output);
+    if (total_rows <= page_rows) return 0;
+    if (current) |offset| return offset -| page_rows;
+    const bottom_offset = total_rows - page_rows;
+    return bottom_offset -| page_rows;
+}
+
+fn pageOutputDown(init: std.process.Init, term: *zz.Terminal, output: []const u8, current: ?usize) ?usize {
+    const offset = current orelse return null;
+    const page_rows = outputPageRows(init, term);
+    const total_rows = outputLineRows(output);
+    const next = offset + page_rows;
+    if (next + page_rows >= total_rows) return null;
+    return next;
+}
+
+fn outputPageRows(init: std.process.Init, term: *zz.Terminal) usize {
+    const size = term.getSize() catch null;
+    const fallback_size = tuiSize(init.environ_map);
+    const height = if (size) |value| value.rows else fallback_size.height;
+    return @max(@as(usize, 4), @as(usize, height -| 12));
+}
+
+fn outputLineRows(output: []const u8) usize {
+    if (output.len == 0) return 1;
+    return std.mem.count(u8, output, "\n") + 1;
+}
+
 fn drawRaw(
     init: std.process.Init,
     term: *zz.Terminal,
@@ -403,7 +433,7 @@ fn drawRaw(
     mode: []const u8,
     planner: []const u8,
     running: bool,
-    output_bottom: bool,
+    output_offset: ?usize,
 ) !void {
     const size = term.getSize() catch null;
     const fallback_size = tuiSize(init.environ_map);
@@ -415,7 +445,8 @@ fn drawRaw(
         .status = status,
         .input = input,
         .output = output,
-        .output_bottom = output_bottom,
+        .output_bottom = output_offset == null,
+        .output_offset = output_offset,
         .agents = agents,
         .history = history,
     }, width, height);
@@ -589,7 +620,7 @@ fn handleInteractiveLine(
                 return false;
             }
             try appendHistory(init.gpa, history, task);
-            try drawRaw(init, term, task, last_output.*, agents.*, history.*, dry_run.*, agent_filter.*, mode.*, planner.*, true, true);
+            try drawRaw(init, term, task, last_output.*, agents.*, history.*, dry_run.*, agent_filter.*, mode.*, planner.*, true, null);
             var args = std.array_list.Managed([]const u8).init(init.gpa);
             defer args.deinit();
             try args.append("openfugu");

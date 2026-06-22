@@ -6,6 +6,7 @@ pub const Dashboard = struct {
     input: []const u8,
     output: []const u8,
     output_bottom: bool = true,
+    output_offset: ?usize = null,
     agents: []const u8,
     history: []const u8,
 };
@@ -31,11 +32,11 @@ pub fn renderDashboardSized(allocator: std.mem.Allocator, dashboard: Dashboard, 
     const main_width: u16 = @max(@as(u16, 20), inner_width -| side_width -| 2);
     const output_height: u16 = @max(4, height -| 12);
 
-    const output_view = try viewportText(allocator, dashboard.output, main_width, output_height, dashboard.output_bottom);
+    const output_view = try viewportText(allocator, dashboard.output, main_width, output_height, dashboard.output_bottom, dashboard.output_offset);
     defer allocator.free(output_view);
-    const agents_view = try viewportText(allocator, dashboard.agents, side_width, @max(@as(u16, 3), output_height / 2), false);
+    const agents_view = try viewportText(allocator, dashboard.agents, side_width, @max(@as(u16, 3), output_height / 2), false, null);
     defer allocator.free(agents_view);
-    const history_view = try viewportText(allocator, dashboard.history, side_width, @max(@as(u16, 3), output_height -| (output_height / 2)), true);
+    const history_view = try viewportText(allocator, dashboard.history, side_width, @max(@as(u16, 3), output_height -| (output_height / 2)), true, null);
     defer allocator.free(history_view);
     const side = try std.fmt.allocPrint(allocator, "Agents\n{s}\nHistory\n{s}", .{ agents_view, history_view });
     defer allocator.free(side);
@@ -65,11 +66,15 @@ pub fn renderDashboardSized(allocator: std.mem.Allocator, dashboard: Dashboard, 
     return std.fmt.allocPrint(allocator, "{s}{s}{s}", .{ zz.ansi.screen_clear, zz.ansi.cursor_home, framed });
 }
 
-fn viewportText(allocator: std.mem.Allocator, text: []const u8, width: u16, height: u16, bottom: bool) ![]const u8 {
+fn viewportText(allocator: std.mem.Allocator, text: []const u8, width: u16, height: u16, bottom: bool, offset: ?usize) ![]const u8 {
     var viewport = zz.Viewport.init(allocator, width, height);
     defer viewport.deinit();
     viewport.setWrap(true);
     try viewport.setContent(text);
-    if (bottom) viewport.gotoBottom();
+    if (offset) |y_offset| {
+        viewport.scrollTo(y_offset, 0);
+    } else if (bottom) {
+        viewport.gotoBottom();
+    }
     return viewport.view(allocator);
 }
