@@ -89,6 +89,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :verify  run local verification
                     \\  :cancel  cancel running task
                     \\  :rerun   rerun last task
+                    \\  :save    save current output to file
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
@@ -180,6 +181,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .rerun => {
                 try replaceLog(init.gpa, &last_output, "no previous task\n");
+                try writer.interface.writeAll(last_output);
+            },
+            .save => |path| {
+                try saveOutput(init, &last_output, path);
                 try writer.interface.writeAll(last_output);
             },
             .plan => |task| {
@@ -292,6 +297,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":verify",
         ":cancel",
         ":rerun",
+        ":save ",
         ":dry-run",
         ":no-apply",
         ":apply",
@@ -620,6 +626,7 @@ fn handleInteractiveLine(
             \\  :verify  run local verification
             \\  :cancel  cancel running task
             \\  :rerun   rerun last task
+            \\  :save    save current output to file
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
@@ -677,6 +684,7 @@ fn handleInteractiveLine(
             try replaceLog(init.gpa, last_output, "apply=true\n");
         },
         .rerun => try replaceLog(init.gpa, last_output, "no previous task\n"),
+        .save => |path| try saveOutput(init, last_output, path),
         .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
         .replay => |run_id| try runReplay(init, last_output, run_id),
@@ -1022,6 +1030,13 @@ fn runCommandText(init: std.process.Init, args: []const []const u8) ![]u8 {
     };
     defer result.deinit(init.gpa);
     return init.gpa.dupe(u8, result.text);
+}
+
+fn saveOutput(init: std.process.Init, log: *[]u8, path: []const u8) !void {
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = log.* });
+    const message = try std.fmt.allocPrint(init.gpa, "saved {s}\n", .{path});
+    defer init.gpa.free(message);
+    try replaceLog(init.gpa, log, message);
 }
 
 fn replaceLog(allocator: std.mem.Allocator, log: *[]u8, text: []const u8) !void {
