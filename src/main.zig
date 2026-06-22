@@ -93,6 +93,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :run     run shell command
                     \\  :cwd     change working directory
                     \\  :load    run task text from file
+                    \\  :open    show file in output pane
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
@@ -205,6 +206,10 @@ fn repl(init: std.process.Init) !u8 {
                 };
                 defer init.gpa.free(text);
                 try runReplTask(init, &last_output, &history, text, dry_run, agent_filter, mode, planner);
+                try writer.interface.writeAll(last_output);
+            },
+            .open => |path| {
+                try showFile(init, &last_output, path);
                 try writer.interface.writeAll(last_output);
             },
             .plan => |task| {
@@ -320,6 +325,17 @@ fn loadTaskFile(init: std.process.Init, last_output: *[]u8, path: []const u8) ![
     return copy;
 }
 
+fn showFile(init: std.process.Init, log: *[]u8, path: []const u8) !void {
+    const text = std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024)) catch |err| {
+        const message = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+        defer init.gpa.free(message);
+        try replaceLog(init.gpa, log, message);
+        return;
+    };
+    defer init.gpa.free(text);
+    try appendLog(init.gpa, log, path, text);
+}
+
 fn rawRepl(init: std.process.Init) !u8 {
     var env = zz.Environment.fromEnvMap(init.environ_map);
     var term = try zz.Terminal.init(init.io, &env, .{ .alt_screen = true, .hide_cursor = false, .bracketed_paste = true });
@@ -351,6 +367,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":run ",
         ":cwd ",
         ":load ",
+        ":open ",
         ":dry-run",
         ":no-apply",
         ":apply",
@@ -722,6 +739,7 @@ fn handleInteractiveLine(
             \\  :run     run shell command
             \\  :cwd     change working directory
             \\  :load    run task text from file
+            \\  :open    show file in output pane
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
@@ -801,6 +819,7 @@ fn handleInteractiveLine(
             defer init.gpa.free(text);
             try startOpenfuguTask(init, text, last_output, agents, history, dry_run, agent_filter, mode, planner, term, job);
         },
+        .open => |path| try showFile(init, last_output, path),
         .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
         .replay => |run_id| try runReplay(init, last_output, run_id),
