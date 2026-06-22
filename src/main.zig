@@ -93,7 +93,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :clear-history clear input and task history
                     \\  :quit    exit
                     \\
-                    \\Keys: Up/Down input history, PageUp/PageDown output pane.
+                    \\Keys: Up/Down input history, PageUp/PageDown output page, Home/End output top/bottom.
                     \\
                     \\Type any other line to route and execute it.
                     \\
@@ -349,6 +349,8 @@ fn rawRepl(init: std.process.Init) !u8 {
                         }
                     }
                 },
+                .home => output_offset = 0,
+                .end => output_offset = null,
                 .page_up => output_offset = pageOutputUp(init, &term, last_output, output_offset),
                 .page_down => output_offset = pageOutputDown(init, &term, last_output, output_offset),
                 .enter => {
@@ -549,7 +551,7 @@ fn handleInteractiveLine(
             \\  :clear-history clear input and task history
             \\  :quit    exit
             \\
-            \\Keys: Up/Down input history, PageUp/PageDown output pane.
+            \\Keys: Up/Down input history, PageUp/PageDown output page, Home/End output top/bottom.
             \\
             \\Type any other line to route and execute it.
             \\
