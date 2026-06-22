@@ -40,6 +40,7 @@ pub const DetectSpec = struct {
     name: []const u8,
     version_argv: []const []const u8,
     auth_argv: []const []const u8,
+    auth_success_means_subscription: bool = false,
     task_argv: ?[]const []const u8 = null,
     router_argv: ?[]const []const u8 = null,
     supported_version: []const u8,
@@ -71,7 +72,7 @@ pub fn detect(allocator: std.mem.Allocator, io: std.Io, spec: DetectSpec) !Agent
     });
     defer auth_result.deinit(allocator);
 
-    const auth = if (auth_result.exit_code == 0) classifyAuth(auth_result.stdout_tail, auth_result.stderr_tail) else .unknown;
+    const auth = classifyAuthResult(auth_result, spec.auth_success_means_subscription);
     const compatibility: types.Compatibility = if (std.mem.startsWith(u8, version, spec.supported_version))
         spec.profile.compatibility
     else
@@ -114,6 +115,14 @@ fn classifyAuth(stdout: []const u8, stderr: []const u8) types.AuthKind {
     if (hasAuthText(stdout, "subscription") or hasAuthText(stderr, "subscription")) return .subscription;
     if (hasAuthText(stdout, "Logged in using ChatGPT") or hasAuthText(stderr, "Logged in using ChatGPT")) return .subscription;
     if (hasAuthText(stdout, "unauthenticated") or hasAuthText(stderr, "unauthenticated")) return .unauthenticated;
+    return .unknown;
+}
+
+fn classifyAuthResult(result: runner.RunResult, success_means_subscription: bool) types.AuthKind {
+    const auth = classifyAuth(result.stdout_tail, result.stderr_tail);
+    if (auth != .unknown) return auth;
+    if (result.exit_code == 0 and success_means_subscription) return .subscription;
+    if (hasAuthText(result.stdout_tail, "Authentication required") or hasAuthText(result.stderr_tail, "Authentication required")) return .unauthenticated;
     return .unknown;
 }
 

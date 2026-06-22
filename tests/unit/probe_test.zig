@@ -37,6 +37,22 @@ test "probe rejects api key auth under subscription only" {
     try std.testing.expect(!report.runnable);
 }
 
+test "probe treats successful antigravity models command as subscription auth" {
+    var report = try openfugu.probe.detect(std.testing.allocator, std.testing.io, .{
+        .name = "agy",
+        .version_argv = &.{ test_options.probe_cli_path, "--version" },
+        .auth_argv = &.{ test_options.probe_cli_path, "models" },
+        .auth_success_means_subscription = true,
+        .supported_version = "supported-1",
+        .profile = openfugu.antigravity.profileForVersion("degraded-text"),
+        .subscription = openfugu.config.Config.default().subscription,
+    });
+    defer report.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(openfugu.types.AuthKind.subscription, report.auth);
+    try std.testing.expect(report.runnable);
+}
+
 test "doctor cli uses probe specs instead of static unknown reports" {
     const specs = [_]openfugu.probe.DetectSpec{.{
         .name = "claude",

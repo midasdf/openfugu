@@ -23,7 +23,7 @@ const claude_auth_argv = [_][]const u8{ "claude", "auth", "status" };
 const codex_version_argv = [_][]const u8{ "codex", "--version" };
 const codex_auth_argv = [_][]const u8{ "codex", "login", "status" };
 const agy_version_argv = [_][]const u8{ "agy", "--version" };
-const agy_auth_argv = [_][]const u8{ "agy", "auth", "status" };
+const agy_auth_argv = [_][]const u8{ "agy", "models" };
 
 const RoutingCandidate = struct {
     spec: probe.DetectSpec,
@@ -283,6 +283,7 @@ fn defaultDetectSpecs() [3]probe.DetectSpec {
             .name = "agy",
             .version_argv = &agy_version_argv,
             .auth_argv = &agy_auth_argv,
+            .auth_success_means_subscription = true,
             .supported_version = "1.0.",
             .profile = antigravity.profileForVersion("1.0."),
             .subscription = subscription,

@@ -2,7 +2,7 @@ const std = @import("std");
 const adapter = @import("adapter.zig");
 const types = @import("../core/types.zig");
 
-const auth_argv = [_][]const u8{ "agy", "auth", "status" };
+const auth_argv = [_][]const u8{ "agy", "models" };
 const api_key_env = [_][]const u8{ "GOOGLE_API_KEY", "GEMINI_API_KEY" };
 
 pub fn profileForVersion(version: []const u8) adapter.Profile {
