@@ -46,3 +46,7 @@ zig build smoke -Dreal-cli-tests=true -Dreal-cli-task-tests=true
 ```
 
 The normal test suite uses fake agents and temporary git repositories only.
+
+Task execution uses local scoring by default. Passing `--planner
+subscription-agent` asks a subscription CLI to route the task first, then falls
+back to local scoring if the router output is invalid.

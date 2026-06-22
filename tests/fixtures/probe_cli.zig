@@ -22,6 +22,11 @@ pub fn main(init: std.process.Init) !u8 {
         try out.interface.flush();
         return 0;
     }
+    if (args.len >= 2 and std.mem.eql(u8, args[1], "route-codex")) {
+        try out.interface.writeAll("{\"task_kind\":\"test_fix\",\"preferred_agent\":\"codex\"}\n");
+        try out.interface.flush();
+        return 0;
+    }
 
     try err.interface.writeAll("unknown probe command\n");
     try err.interface.flush();

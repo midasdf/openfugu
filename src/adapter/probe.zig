@@ -41,6 +41,7 @@ pub const DetectSpec = struct {
     version_argv: []const []const u8,
     auth_argv: []const []const u8,
     task_argv: ?[]const []const u8 = null,
+    router_argv: ?[]const []const u8 = null,
     supported_version: []const u8,
     profile: adapter.Profile,
     subscription: config.SubscriptionConfig,

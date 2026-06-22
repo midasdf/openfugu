@@ -54,3 +54,24 @@ test "policy skips cooldown agent and selects alternate after rate limit" {
     const selected = try openfugu.policy.chooseAgent(&agents, 1_000);
     try std.testing.expectEqualStrings("codex", selected.id);
 }
+
+test "fast router hint rejects invalid json and scores preferred agent" {
+    try std.testing.expect(openfugu.policy.parseRouterHint("not json") == null);
+    const hint = openfugu.policy.parseRouterHint("text {\"task_kind\":\"terminal\",\"preferred_agent\":\"codex\"} tail") orelse return error.MissingHint;
+    try std.testing.expectEqual(openfugu.policy.TaskKind.terminal, hint.kind.?);
+    try std.testing.expectEqual(openfugu.policy.PreferredAgent.codex, hint.preferred_agent);
+    try std.testing.expect(openfugu.policy.scoreAgent(.{
+        .id = "codex",
+        .profile_name = "codex",
+        .kind = hint.kind.?,
+        .preferred_agent = hint.preferred_agent,
+    }) > openfugu.policy.scoreAgent(.{
+        .id = "claude",
+        .profile_name = "claude-code",
+        .kind = hint.kind.?,
+        .preferred_agent = hint.preferred_agent,
+    }));
+    const escaped = openfugu.policy.parseRouterHint("{\"message\":\"{\\\"task_kind\\\":\\\"review\\\",\\\"preferred_agent\\\":\\\"claude\\\"}\"}") orelse return error.MissingEscapedHint;
+    try std.testing.expectEqual(openfugu.policy.TaskKind.review, escaped.kind.?);
+    try std.testing.expectEqual(openfugu.policy.PreferredAgent.claude, escaped.preferred_agent);
+}

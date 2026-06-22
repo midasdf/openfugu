@@ -13,3 +13,7 @@ with `cherry-pick --no-commit`, and reruns the same verification after apply.
 The subscription planner path must validate model-proposed plans before use. If
 the output is invalid, openfugu falls back to the deterministic heuristic
 planner.
+
+For task execution, `--planner subscription-agent` first asks a subscription CLI
+for a small routing hint. The hint only affects local scoring after validation;
+invalid hints are ignored.

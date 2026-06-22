@@ -11,6 +11,7 @@ const claude_code = @import("adapter/claude_code.zig");
 const codex = @import("adapter/codex.zig");
 const antigravity = @import("adapter/antigravity.zig");
 const conductor = @import("conductor/loop.zig");
+const policy = @import("conductor/policy.zig");
 const verify = @import("verify/commands.zig");
 const types = @import("core/types.zig");
 const adapter = @import("adapter/adapter.zig");
@@ -23,6 +24,12 @@ const codex_version_argv = [_][]const u8{ "codex", "--version" };
 const codex_auth_argv = [_][]const u8{ "codex", "login", "status" };
 const agy_version_argv = [_][]const u8{ "agy", "--version" };
 const agy_auth_argv = [_][]const u8{ "agy", "auth", "status" };
+
+const RoutingCandidate = struct {
+    spec: probe.DetectSpec,
+    report: probe.AgentReport,
+    score: i64,
+};
 
 pub const exit_ok: u8 = 0;
 pub const exit_usage: u8 = 2;
@@ -124,7 +131,7 @@ pub fn runWithProbeSpecsInRepo(
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
     if (try taskText(args)) |task| {
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"));
     }
     return run(allocator, args);
 }
@@ -333,27 +340,61 @@ fn runFirstRunnableSpec(
     agents_filter: ?[]const u8,
     mode: ?[]const u8,
     depth: ?[]const u8,
+    planner_backend: ?[]const u8,
     review: model_review.Review,
     cooldown_filter: ?[]const u8,
 ) !Result {
     try std.Io.Dir.cwd().createDirPath(io, worktree_root);
-    var saw_runnable = false;
+    var candidates = try allocator.alloc(RoutingCandidate, specs.len);
+    defer allocator.free(candidates);
+    var candidate_count: usize = 0;
+    var kind = policy.classifyTask(task_text);
+    var preferred_agent: policy.PreferredAgent = .none;
+    var router_name: []const u8 = "heuristic";
     for (specs) |spec| {
         if (!agentAllowed(agents_filter, spec.name)) continue;
         if (agentListed(cooldown_filter, spec.name)) continue;
         var report_value = try probe.detect(allocator, io, spec);
-        defer report_value.deinit(allocator);
-        if (!report_value.runnable) continue;
-        saw_runnable = true;
+        if (!report_value.runnable) {
+            report_value.deinit(allocator);
+            continue;
+        }
+        candidates[candidate_count] = .{
+            .spec = spec,
+            .report = report_value,
+            .score = 0,
+        };
+        candidate_count += 1;
+    }
+    defer freeRoutingCandidates(allocator, candidates[0..candidate_count]);
+    if (planner_backend) |backend| {
+        if (std.mem.eql(u8, backend, "subscription-agent")) {
+            if (try fastRouterHint(allocator, io, repo_path, task_text, candidates[0..candidate_count])) |hint| {
+                if (hint.kind) |router_kind| kind = router_kind;
+                preferred_agent = hint.preferred_agent;
+                router_name = "subscription-agent";
+            }
+        }
+    }
+    for (candidates[0..candidate_count]) |*candidate| {
+        candidate.score = policy.scoreAgent(.{
+            .id = candidate.report.name,
+            .profile_name = candidate.spec.profile.name,
+            .kind = kind,
+            .preferred_agent = preferred_agent,
+        });
+    }
+    sortRoutingCandidates(candidates[0..candidate_count]);
 
-        var owned_invocation = try invocationForSpec(allocator, spec, task_text);
+    for (candidates[0..candidate_count]) |*candidate| {
+        var owned_invocation = try invocationForSpec(allocator, candidate.spec, task_text);
         defer owned_invocation.deinit(allocator);
         var summary = try conductor.runInvocationSingle(allocator, .{
             .repo_path = repo_path,
             .worktree_root = worktree_root,
             .run_id = "cli",
             .candidate_id = "candidate",
-            .agent_id = report_value.name,
+            .agent_id = candidate.report.name,
             .invocation = owned_invocation.value,
             .timeout_ms = 180000,
             .io = io,
@@ -366,7 +407,7 @@ fn runFirstRunnableSpec(
         defer allocator.free(ledger_path);
         try ledger.append(allocator, io, ledger_path, .{
             .run_id = "cli",
-            .agent = report_value.name,
+            .agent = candidate.report.name,
             .content = task_text,
             .include_content = false,
             .verification_passed = summary.candidate_verification.passed,
@@ -379,15 +420,17 @@ fn runFirstRunnableSpec(
         if (code != exit_ok and continuesAfterFailure(mode, depth)) continue;
         return .{
             .code = code,
-            .text = try std.fmt.allocPrint(allocator, "agent={s} accepted={} applied={} reverified={}\n", .{
-                report_value.name,
+            .text = try std.fmt.allocPrint(allocator, "router={s} route={s} agent={s} accepted={} applied={} reverified={}\n", .{
+                router_name,
+                @tagName(kind),
+                candidate.report.name,
                 summary.accepted,
                 summary.applied,
                 summary.reverified,
             }),
         };
     }
-    if (saw_runnable) {
+    if (candidate_count != 0) {
         return .{
             .code = exit_verify,
             .text = try allocator.dupe(u8, "no candidate passed verification\n"),
@@ -397,6 +440,86 @@ fn runFirstRunnableSpec(
         .code = exit_no_agent,
         .text = try allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n"),
     };
+}
+
+fn sortRoutingCandidates(candidates: []RoutingCandidate) void {
+    var i: usize = 0;
+    while (i < candidates.len) : (i += 1) {
+        var best = i;
+        var j = i + 1;
+        while (j < candidates.len) : (j += 1) {
+            if (candidates[j].score > candidates[best].score) best = j;
+        }
+        if (best != i) std.mem.swap(RoutingCandidate, &candidates[i], &candidates[best]);
+    }
+}
+
+fn freeRoutingCandidates(allocator: std.mem.Allocator, candidates: []RoutingCandidate) void {
+    for (candidates) |*candidate| candidate.report.deinit(allocator);
+}
+
+fn fastRouterHint(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    repo_path: []const u8,
+    task_text: []const u8,
+    candidates: []const RoutingCandidate,
+) !?policy.RouterHint {
+    for (candidates) |candidate| {
+        if (candidate.spec.router_argv) |argv| {
+            var result = try runner.run(allocator, io, .{
+                .executable = argv[0],
+                .argv = argv,
+                .cwd = repo_path,
+                .stdout_tail_bytes = 4096,
+                .stderr_tail_bytes = 4096,
+                .timeout_ms = 30000,
+            });
+            defer result.deinit(allocator);
+            if (result.exit_code == 0) {
+                if (policy.parseRouterHint(result.stdout_tail)) |hint| return hint;
+            }
+        }
+    }
+    for (candidates) |candidate| {
+        if (!candidate.report.structured_output) continue;
+        const prompt = try fastRouterPrompt(allocator, task_text);
+        defer allocator.free(prompt);
+        const task = types.Task{
+            .id = "fast-router",
+            .role = .thinker,
+            .intent = .plan,
+            .instruction = prompt,
+            .worktree_path = repo_path,
+            .context = "",
+            .target_files = &.{},
+            .timeout_ms = 30000,
+            .read_only = true,
+        };
+        var invocation = routerInvocationForSpec(allocator, candidate.spec, task) catch continue;
+        defer invocation.deinit(allocator);
+        var result = runner.runInvocation(allocator, io, invocation.value, 30000) catch continue;
+        defer result.deinit(allocator);
+        if (result.exit_code == 0) {
+            if (policy.parseRouterHint(result.stdout_tail)) |hint| return hint;
+        }
+    }
+    return null;
+}
+
+fn fastRouterPrompt(allocator: std.mem.Allocator, task_text: []const u8) ![]u8 {
+    return std.fmt.allocPrint(
+        allocator,
+        "Route this coding task. Return only JSON with task_kind and preferred_agent. task_kind must be one of general, bugfix, test_fix, refactor, terminal, review, broad. preferred_agent must be one of claude, codex, agy. Task: {s}",
+        .{task_text},
+    );
+}
+
+fn routerInvocationForSpec(allocator: std.mem.Allocator, spec: probe.DetectSpec, task: types.Task) !adapter.OwnedInvocation {
+    if (std.mem.eql(u8, spec.profile.name, "claude-code")) return claude_code.buildInvocation(allocator, .supported_1, task);
+    if (std.mem.eql(u8, spec.profile.name, "codex")) return codex.buildInvocation(allocator, .supported_1, task);
+    if (std.mem.eql(u8, spec.profile.name, "antigravity")) return antigravity.buildInvocation(allocator, .degraded_text, task);
+    return error.UnsupportedProfile;
 }
 
 fn hasFlag(args: []const []const u8, flag: []const u8) bool {
