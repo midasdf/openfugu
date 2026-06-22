@@ -488,25 +488,33 @@ fn runFirstRunnableSpec(
                 .text = try allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n"),
             };
         }
-        const candidate = candidates[0];
-        return .{
-            .code = exit_ok,
-            .text = try std.fmt.allocPrint(allocator,
-                \\router={s}
-                \\route={s}
-                \\preferred={s}
-                \\score={d}
-                \\agent={s}
-                \\execute=false
-                \\
-            , .{
-                router_name,
-                @tagName(kind),
-                @tagName(preferred_agent),
-                candidate.score,
-                candidate.report.name,
-            }),
-        };
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(allocator);
+        const header = try std.fmt.allocPrint(allocator,
+            \\router={s}
+            \\route={s}
+            \\preferred={s}
+            \\
+        , .{
+            router_name,
+            @tagName(kind),
+            @tagName(preferred_agent),
+        });
+        defer allocator.free(header);
+        try out.appendSlice(allocator, header);
+        for (candidates[0..candidate_count]) |candidate| {
+            const line = try std.fmt.allocPrint(allocator, "candidate agent={s} score={d}\n", .{ candidate.report.name, candidate.score });
+            defer allocator.free(line);
+            try out.appendSlice(allocator, line);
+        }
+        const footer = try std.fmt.allocPrint(allocator,
+            \\selected={s}
+            \\execute=false
+            \\
+        , .{candidates[0].report.name});
+        defer allocator.free(footer);
+        try out.appendSlice(allocator, footer);
+        return .{ .code = exit_ok, .text = try out.toOwnedSlice(allocator) };
     }
 
     for (candidates[0..candidate_count]) |*candidate| {
