@@ -97,6 +97,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :save    save current output to file
                     \\  :run     run shell command
                     \\  :rg      search files with ripgrep
+                    \\  :todo    search todo markers
                     \\  :ls      list files
                     \\  :files   list files recursively
                     \\  :cd      change working directory
@@ -207,6 +208,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .rg => |pattern| {
                 try runRg(init, &last_output, pattern);
+                try writer.interface.writeAll(last_output);
+            },
+            .todo => {
+                try runTodo(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .ls => |path| {
@@ -389,6 +394,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":save ",
         ":run ",
         ":rg ",
+        ":todo",
         ":ls",
         ":ls ",
         ":files",
@@ -770,6 +776,7 @@ fn handleInteractiveLine(
             \\  :save    save current output to file
             \\  :run     run shell command
             \\  :rg      search files with ripgrep
+            \\  :todo    search todo markers
             \\  :ls      list files
             \\  :files   list files recursively
             \\  :cd      change working directory
@@ -845,6 +852,7 @@ fn handleInteractiveLine(
             try replaceLog(init.gpa, last_output, "command running\n");
         },
         .rg => |pattern| try runRg(init, last_output, pattern),
+        .todo => try runTodo(init, last_output),
         .ls => |path| try runLs(init, last_output, path),
         .files => |path| try runFiles(init, last_output, path),
         .cwd => |path| {
@@ -1152,6 +1160,25 @@ fn runRg(init: std.process.Init, log: *[]u8, pattern: []const u8) !void {
     defer result.deinit(init.gpa);
     const text = if (result.exit_code == 0) result.stdout_tail else if (result.exit_code == 1) "no matches\n" else result.stderr_tail;
     try appendLog(init.gpa, log, pattern, if (text.len == 0) "no matches\n" else text);
+}
+
+fn runTodo(init: std.process.Init, log: *[]u8) !void {
+    var result = openfugu.runner.run(init.gpa, init.io, .{
+        .executable = "rg",
+        .argv = &.{ "rg", "-n", "-e", "T[O]DO|F[I]XME|X[X]X" },
+        .cwd = ".",
+        .stdout_tail_bytes = 16 * 1024,
+        .stderr_tail_bytes = 2048,
+        .timeout_ms = 5000,
+    }) catch |err| {
+        const text = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+        defer init.gpa.free(text);
+        try appendLog(init.gpa, log, ":todo", text);
+        return;
+    };
+    defer result.deinit(init.gpa);
+    const text = if (result.exit_code == 0) result.stdout_tail else if (result.exit_code == 1) "no todos\n" else result.stderr_tail;
+    try appendLog(init.gpa, log, ":todo", if (text.len == 0) "no todos\n" else text);
 }
 
 fn runLs(init: std.process.Init, log: *[]u8, path: []const u8) !void {

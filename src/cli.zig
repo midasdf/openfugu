@@ -217,6 +217,7 @@ pub const InteractiveInput = union(enum) {
     save: []const u8,
     run: []const u8,
     rg: []const u8,
+    todo,
     ls: []const u8,
     files: []const u8,
     cwd: []const u8,
@@ -259,6 +260,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (commandValue(task, ":save")) |value| return .{ .save = value };
     if (commandValue(task, ":run")) |value| return .{ .run = value };
     if (commandValue(task, ":rg")) |value| return .{ .rg = value };
+    if (std.mem.eql(u8, task, ":todo")) return .todo;
     if (std.mem.eql(u8, task, ":ls")) return .{ .ls = "." };
     if (commandValue(task, ":ls")) |value| return .{ .ls = value };
     if (std.mem.eql(u8, task, ":files")) return .{ .files = "." };
