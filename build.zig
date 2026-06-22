@@ -123,6 +123,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    smoke_mod.addImport("openfugu", mod);
     smoke_mod.addOptions("smoke_options", smoke_options);
     const smoke_tests = b.addTest(.{ .root_module = smoke_mod });
     const run_smoke = b.addRunArtifact(smoke_tests);
