@@ -10,6 +10,10 @@ const replay = @import("obs/replay.zig");
 const claude_code = @import("adapter/claude_code.zig");
 const codex = @import("adapter/codex.zig");
 const antigravity = @import("adapter/antigravity.zig");
+const conductor = @import("conductor/loop.zig");
+const verify = @import("verify/commands.zig");
+const types = @import("core/types.zig");
+const adapter = @import("adapter/adapter.zig");
 
 const claude_version_argv = [_][]const u8{ "claude", "--version" };
 const claude_auth_argv = [_][]const u8{ "claude", "auth", "status" };
@@ -59,6 +63,18 @@ pub fn runWithProbeSpecs(
     args: []const []const u8,
     specs: []const probe.DetectSpec,
 ) !Result {
+    return runWithProbeSpecsInRepo(allocator, io, args, specs, ".", ".openfugu/worktrees", defaultVerifyCommands());
+}
+
+pub fn runWithProbeSpecsInRepo(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    args: []const []const u8,
+    specs: []const probe.DetectSpec,
+    repo_path: []const u8,
+    worktree_root: []const u8,
+    verify_commands: []const verify.Command,
+) !Result {
     if (args.len <= 1) return run(allocator, args);
     if (std.mem.eql(u8, args[1], "doctor") or std.mem.eql(u8, args[1], "agents")) {
         const reports = try collectReports(allocator, io, specs);
@@ -77,8 +93,8 @@ pub fn runWithProbeSpecs(
         }
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
-    if (try taskText(args) != null) {
-        return runFirstRunnableSpec(allocator, io, specs);
+    if (try taskText(args)) |task| {
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"));
     }
     return run(allocator, args);
 }
@@ -235,26 +251,90 @@ fn worktreeOk(allocator: std.mem.Allocator, io: std.Io) bool {
     return result.exit_code == 0;
 }
 
-fn runFirstRunnableSpec(allocator: std.mem.Allocator, io: std.Io, specs: []const probe.DetectSpec) !Result {
+fn runFirstRunnableSpec(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    specs: []const probe.DetectSpec,
+    repo_path: []const u8,
+    worktree_root: []const u8,
+    verify_commands: []const verify.Command,
+    task_text: []const u8,
+    no_apply: bool,
+) !Result {
+    try std.Io.Dir.cwd().createDirPath(io, worktree_root);
     for (specs) |spec| {
         var report_value = try probe.detect(allocator, io, spec);
         defer report_value.deinit(allocator);
         if (!report_value.runnable) continue;
-        const argv = spec.task_argv orelse continue;
-        var raw = try runner.run(allocator, io, .{
-            .executable = argv[0],
-            .argv = argv,
-            .cwd = ".",
+
+        var owned_invocation = try invocationForSpec(allocator, spec, task_text);
+        defer owned_invocation.deinit(allocator);
+        var summary = try conductor.runInvocationSingle(allocator, .{
+            .repo_path = repo_path,
+            .worktree_root = worktree_root,
+            .run_id = "cli",
+            .candidate_id = "candidate",
+            .agent_id = report_value.name,
+            .invocation = owned_invocation.value,
             .timeout_ms = 180000,
+            .io = io,
+            .verify_commands = verify_commands,
+            .apply = !no_apply,
         });
-        defer raw.deinit(allocator);
+        defer summary.deinit(allocator);
+
         return .{
-            .code = if (raw.exit_code == 0) exit_ok else exit_verify,
-            .text = try std.fmt.allocPrint(allocator, "agent={s} exit={?}\n{s}", .{ report_value.name, raw.exit_code, raw.stdout_tail }),
+            .code = if (summary.accepted and (no_apply or (summary.applied and summary.reverified))) exit_ok else exit_verify,
+            .text = try std.fmt.allocPrint(allocator, "agent={s} accepted={} applied={} reverified={}\n", .{
+                report_value.name,
+                summary.accepted,
+                summary.applied,
+                summary.reverified,
+            }),
         };
     }
     return .{
         .code = exit_no_agent,
         .text = try allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n"),
+    };
+}
+
+fn hasFlag(args: []const []const u8, flag: []const u8) bool {
+    for (args) |arg| {
+        if (std.mem.eql(u8, arg, flag)) return true;
+    }
+    return false;
+}
+
+fn invocationForSpec(allocator: std.mem.Allocator, spec: probe.DetectSpec, task_text_value: []const u8) !adapter.OwnedInvocation {
+    if (spec.task_argv) |argv| {
+        return adapter.ownInvocation(allocator, .{
+            .executable = argv[0],
+            .argv = argv,
+            .cwd = ".",
+        });
+    }
+
+    const task = types.Task{
+        .id = "cli-task",
+        .role = .worker,
+        .intent = .implement,
+        .instruction = task_text_value,
+        .worktree_path = ".",
+        .context = "",
+        .target_files = &.{},
+        .timeout_ms = 180000,
+        .read_only = false,
+    };
+    if (std.mem.eql(u8, spec.profile.name, "claude-code")) return claude_code.buildInvocation(allocator, .supported_1, task);
+    if (std.mem.eql(u8, spec.profile.name, "codex")) return codex.buildInvocation(allocator, .supported_1, task);
+    if (std.mem.eql(u8, spec.profile.name, "antigravity")) return antigravity.buildInvocation(allocator, .degraded_text, task);
+    return error.UnsupportedProfile;
+}
+
+fn defaultVerifyCommands() []const verify.Command {
+    return &.{
+        .{ .name = "build", .argv = &.{ "zig", "build" } },
+        .{ .name = "test", .argv = &.{ "zig", "build", "test" } },
     };
 }

@@ -26,6 +26,7 @@ pub const InvocationSingleRequest = struct {
     timeout_ms: u64,
     io: std.Io,
     verify_commands: []const verify.Command,
+    apply: bool = true,
 };
 
 pub const RunSummary = struct {
@@ -72,7 +73,6 @@ pub fn runFakeSingle(allocator: std.mem.Allocator, req: FakeSingleRequest) !RunS
             .final_verification = try verify.run(allocator, req.io, req.repo_path, &.{}),
         };
     }
-
     try workspace.applyNoCommit(allocator, req.io, snap, candidate);
 
     var final_verification = try verify.run(allocator, req.io, req.repo_path, req.verify_commands);
@@ -122,6 +122,15 @@ pub fn runInvocationSingle(allocator: std.mem.Allocator, req: InvocationSingleRe
     if (!candidate_verification.passed) {
         return .{
             .accepted = false,
+            .applied = false,
+            .reverified = false,
+            .candidate_verification = candidate_verification,
+            .final_verification = try verify.run(allocator, req.io, req.repo_path, &.{}),
+        };
+    }
+    if (!req.apply) {
+        return .{
+            .accepted = true,
             .applied = false,
             .reverified = false,
             .candidate_verification = candidate_verification,
