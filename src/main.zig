@@ -82,6 +82,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :git     show git status
                     \\  :verify  run local verification
                     \\  :dry-run toggle dry-run mode
+                    \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
                     \\  :agent   set agent: auto, claude, codex, agy
                     \\  :mode    set mode: auto, single, race, ensemble
@@ -131,6 +132,11 @@ fn repl(init: std.process.Init) !u8 {
                 dry_run = !dry_run;
                 init.gpa.free(last_output);
                 last_output = try std.fmt.allocPrint(init.gpa, "dry-run={}\n", .{dry_run});
+                try writer.interface.writeAll(last_output);
+            },
+            .no_apply => {
+                dry_run = true;
+                try replaceLog(init.gpa, &last_output, "dry-run=true\n");
                 try writer.interface.writeAll(last_output);
             },
             .apply => {
@@ -242,6 +248,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":git",
         ":verify",
         ":dry-run",
+        ":no-apply",
         ":apply",
         ":agent auto",
         ":agent claude",
@@ -479,6 +486,7 @@ fn handleInteractiveLine(
             \\  :git     show git status
             \\  :verify  run local verification
             \\  :dry-run toggle dry-run mode
+            \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
             \\  :agent   set agent: auto, claude, codex, agy
             \\  :mode    set mode: auto, single, race, ensemble
@@ -509,6 +517,10 @@ fn handleInteractiveLine(
             dry_run.* = !dry_run.*;
             init.gpa.free(last_output.*);
             last_output.* = try std.fmt.allocPrint(init.gpa, "dry-run={}\n", .{dry_run.*});
+        },
+        .no_apply => {
+            dry_run.* = true;
+            try replaceLog(init.gpa, last_output, "dry-run=true\n");
         },
         .apply => {
             dry_run.* = false;
