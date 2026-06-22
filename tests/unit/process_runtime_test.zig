@@ -97,6 +97,22 @@ test "runner classifies timeout and reaps child" {
     try std.testing.expectEqual(openfugu.protocol.EventKind.diagnostic, result.events[result.events.len - 2].kind);
 }
 
+test "objective verifier records timed out commands as failed" {
+    const sleep_agent = test_options.sleep_agent_path;
+    const argv = [_][]const u8{sleep_agent};
+
+    var verification = try openfugu.verify.run(std.testing.allocator, std.testing.io, ".", &.{
+        .{ .name = "sleep", .argv = &argv, .timeout_ms = 10 },
+    });
+    defer verification.deinit(std.testing.allocator);
+
+    try std.testing.expect(!verification.passed);
+    try std.testing.expect(!verification.unverified);
+    try std.testing.expectEqual(@as(usize, 1), verification.commands.len);
+    try std.testing.expect(verification.commands[0].timed_out);
+    try std.testing.expect(verification.commands[0].exit_code == null);
+}
+
 test "signal cancellation terminates process group and reaps child" {
     const sleep_agent = test_options.sleep_agent_path;
     const argv = [_][]const u8{sleep_agent};

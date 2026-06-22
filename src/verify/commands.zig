@@ -4,11 +4,15 @@ const runner = @import("../proc/runner.zig");
 pub const Command = struct {
     name: []const u8,
     argv: []const []const u8,
+    timeout_ms: ?i64 = null,
 };
 
 pub const CommandResult = struct {
     name: []const u8,
     exit_code: ?u8,
+    signal: ?u32 = null,
+    timed_out: bool = false,
+    canceled: bool = false,
     stdout_tail: []u8,
     stderr_tail: []u8,
 
@@ -56,17 +60,21 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, cwd: []const u8, commands: 
             .cwd = cwd,
             .stdout_tail_bytes = 4096,
             .stderr_tail_bytes = 4096,
+            .timeout_ms = command.timeout_ms,
         });
         defer raw.deinit(allocator);
 
         results[i] = .{
             .name = command.name,
             .exit_code = raw.exit_code,
+            .signal = raw.signal,
+            .timed_out = raw.timed_out,
+            .canceled = raw.canceled,
             .stdout_tail = try allocator.dupe(u8, raw.stdout_tail),
             .stderr_tail = try allocator.dupe(u8, raw.stderr_tail),
         };
         filled += 1;
-        if (raw.exit_code != 0) passed = false;
+        if (raw.exit_code != 0 or raw.signal != null or raw.timed_out or raw.canceled) passed = false;
     }
 
     return .{
