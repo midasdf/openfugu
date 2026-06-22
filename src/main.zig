@@ -91,6 +91,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :rerun   rerun last task
                     \\  :save    save current output to file
                     \\  :run     run shell command
+                    \\  :cd      change working directory
                     \\  :cwd     change working directory
                     \\  :load    run task text from file
                     \\  :open    show file in output pane
@@ -365,6 +366,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":rerun",
         ":save ",
         ":run ",
+        ":cd ",
         ":cwd ",
         ":load ",
         ":open ",
@@ -737,6 +739,7 @@ fn handleInteractiveLine(
             \\  :rerun   rerun last task
             \\  :save    save current output to file
             \\  :run     run shell command
+            \\  :cd      change working directory
             \\  :cwd     change working directory
             \\  :load    run task text from file
             \\  :open    show file in output pane

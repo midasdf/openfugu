@@ -253,6 +253,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":rerun")) return .rerun;
     if (commandValue(task, ":save")) |value| return .{ .save = value };
     if (commandValue(task, ":run")) |value| return .{ .run = value };
+    if (commandValue(task, ":cd")) |value| return .{ .cwd = value };
     if (commandValue(task, ":cwd")) |value| return .{ .cwd = value };
     if (commandValue(task, ":load")) |value| return .{ .load = value };
     if (commandValue(task, ":open")) |value| return .{ .open = value };
