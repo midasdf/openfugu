@@ -52,3 +52,22 @@ test "mux runs multiple fake agents without dropping output" {
         try std.testing.expect(std.mem.indexOf(u8, result.stderr_tail, "fake err") != null);
     }
 }
+
+test "runner classifies timeout and reaps child" {
+    const sleep_agent = test_options.sleep_agent_path;
+    const argv = [_][]const u8{sleep_agent};
+
+    var result = try openfugu.runner.run(std.testing.allocator, std.testing.io, .{
+        .executable = sleep_agent,
+        .argv = &argv,
+        .cwd = ".",
+        .timeout_ms = 10,
+    });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expect(result.timed_out);
+    try std.testing.expect(result.exit_code == null);
+    try std.testing.expect(result.signal == null);
+    try std.testing.expect(result.events.len >= 2);
+    try std.testing.expectEqual(openfugu.protocol.EventKind.diagnostic, result.events[result.events.len - 2].kind);
+}

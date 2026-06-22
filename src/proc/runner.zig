@@ -8,6 +8,7 @@ pub const RunSpec = struct {
     cwd: []const u8,
     stdout_tail_bytes: usize = 4096,
     stderr_tail_bytes: usize = 4096,
+    timeout_ms: ?i64 = null,
 };
 
 pub const RunResult = struct {
@@ -16,6 +17,8 @@ pub const RunResult = struct {
     stdout_tail: []u8,
     stderr_tail: []u8,
     events: []protocol.Event,
+    timed_out: bool = false,
+    canceled: bool = false,
 
     pub fn deinit(self: *RunResult, allocator: std.mem.Allocator) void {
         allocator.free(self.stdout_tail);
@@ -30,10 +33,32 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, spec: RunSpec) !RunResult {
     try s.transition(.spawning);
     try s.transition(.running);
 
-    const raw = try std.process.run(allocator, io, .{
+    const raw = std.process.run(allocator, io, .{
         .argv = spec.argv,
         .cwd = .{ .path = spec.cwd },
-    });
+        .timeout = timeoutFromMs(spec.timeout_ms),
+    }) catch |err| switch (err) {
+        error.Timeout => {
+            try s.transition(.timed_out);
+            try s.transition(.reaped);
+            const events = try protocol.cloneEvents(allocator, &.{
+                .{ .kind = .status, .text = "spawned" },
+                .{ .kind = .diagnostic, .text = "timed_out" },
+                .{ .kind = .final, .text = "reaped" },
+            });
+            errdefer protocol.freeEvents(allocator, events);
+            return .{
+                .exit_code = null,
+                .signal = null,
+                .stdout_tail = try allocator.alloc(u8, 0),
+                .stderr_tail = try allocator.alloc(u8, 0),
+                .events = events,
+                .timed_out = true,
+                .canceled = false,
+            };
+        },
+        else => |e| return e,
+    };
     defer allocator.free(raw.stdout);
     defer allocator.free(raw.stderr);
 
@@ -54,7 +79,17 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, spec: RunSpec) !RunResult {
         .stdout_tail = try tail(allocator, raw.stdout, spec.stdout_tail_bytes),
         .stderr_tail = try tail(allocator, raw.stderr, spec.stderr_tail_bytes),
         .events = events,
+        .timed_out = false,
+        .canceled = false,
     };
+}
+
+fn timeoutFromMs(timeout_ms: ?i64) std.Io.Timeout {
+    const ms = timeout_ms orelse return .none;
+    return .{ .duration = .{
+        .raw = std.Io.Duration.fromMilliseconds(ms),
+        .clock = .awake,
+    } };
 }
 
 fn tail(allocator: std.mem.Allocator, bytes: []const u8, max: usize) ![]u8 {
