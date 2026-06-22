@@ -102,6 +102,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :cancel  cancel running task
                     \\  :rerun   rerun last task
                     \\  :save    save current output to file
+                    \\  :commit  commit staged changes
                     \\  :run     run shell command
                     \\  :rg      search files with ripgrep
                     \\  :todo    search todo markers
@@ -235,6 +236,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .save => |path| {
                 try saveOutput(init, &last_output, path);
+                try writer.interface.writeAll(last_output);
+            },
+            .commit => |message| {
+                try runGitCommit(init, &last_output, message);
                 try writer.interface.writeAll(last_output);
             },
             .run => |command| {
@@ -440,6 +445,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":cancel",
         ":rerun",
         ":save ",
+        ":commit ",
         ":run ",
         ":rg ",
         ":todo",
@@ -829,6 +835,7 @@ fn handleInteractiveLine(
             \\  :cancel  cancel running task
             \\  :rerun   rerun last task
             \\  :save    save current output to file
+            \\  :commit  commit staged changes
             \\  :run     run shell command
             \\  :rg      search files with ripgrep
             \\  :todo    search todo markers
@@ -904,6 +911,7 @@ fn handleInteractiveLine(
         },
         .rerun => try replaceLog(init.gpa, last_output, "no previous task\n"),
         .save => |path| try saveOutput(init, last_output, path),
+        .commit => |message| try runGitCommit(init, last_output, message),
         .run => |command| {
             if (job.* != null) {
                 try replaceLog(init.gpa, last_output, "task already running\n");
@@ -1213,6 +1221,10 @@ fn runGitPatch(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":patch", &.{ "git", "diff", "--no-ext-diff" }, "no patch\n");
 }
 
+fn runGitCommit(init: std.process.Init, log: *[]u8, message: []const u8) !void {
+    try runGitCommand(init, log, ":commit", &.{ "git", "commit", "-m", message }, "committed\n");
+}
+
 fn runCi(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":ci", &.{ "gh", "run", "list", "--limit", "5" }, "no ci runs\n");
 }
@@ -1308,7 +1320,7 @@ fn runGitCommand(init: std.process.Init, log: *[]u8, label: []const u8, argv: []
         return;
     };
     defer result.deinit(init.gpa);
-    const text = if (result.exit_code == 0) result.stdout_tail else result.stderr_tail;
+    const text = if (result.exit_code == 0) result.stdout_tail else if (result.stderr_tail.len != 0) result.stderr_tail else result.stdout_tail;
     try appendLog(init.gpa, log, label, if (text.len == 0) empty_text else text);
 }
 
