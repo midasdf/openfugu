@@ -296,3 +296,10 @@ test "tui render uses viewport and command help" {
     try std.testing.expect(std.mem.indexOf(u8, screen, ":doctor") != null);
     try std.testing.expect(std.mem.indexOf(u8, screen, "line3") != null);
 }
+
+test "tui render accepts terminal dimensions" {
+    const screen = try openfugu.tui.renderSized(std.testing.allocator, "ready", "", "ok\n", 72, 18);
+    defer std.testing.allocator.free(screen);
+
+    try std.testing.expect(std.mem.indexOf(u8, screen, "ok") != null);
+}

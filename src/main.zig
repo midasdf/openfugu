@@ -39,7 +39,8 @@ fn repl(init: std.process.Init) !u8 {
     while (true) {
         const status = if (dry_run) "ready dry-run" else "ready apply";
         if (fullscreen) {
-            const screen = try openfugu.tui.render(init.gpa, status, "", last_output);
+            const size = tuiSize(init.environ_map);
+            const screen = try openfugu.tui.renderSized(init.gpa, status, "", last_output, size.width, size.height);
             defer init.gpa.free(screen);
             try writer.interface.writeAll(screen);
         } else {
@@ -86,7 +87,8 @@ fn repl(init: std.process.Init) !u8 {
             },
             .task => |task| {
                 if (fullscreen) {
-                    const screen = try openfugu.tui.render(init.gpa, if (dry_run) "running dry-run" else "running apply", task, last_output);
+                    const size = tuiSize(init.environ_map);
+                    const screen = try openfugu.tui.renderSized(init.gpa, if (dry_run) "running dry-run" else "running apply", task, last_output, size.width, size.height);
                     defer init.gpa.free(screen);
                     try writer.interface.writeAll(screen);
                     try writer.interface.flush();
@@ -135,4 +137,17 @@ fn appendLog(allocator: std.mem.Allocator, log: *[]u8, input: []const u8, output
     allocator.free(log.*);
     log.* = if (joined.len > 64 * 1024) try allocator.dupe(u8, joined[joined.len - 64 * 1024 ..]) else joined;
     if (joined.ptr != log.*.ptr) allocator.free(joined);
+}
+
+fn tuiSize(env: *const std.process.Environ.Map) struct { width: u16, height: u16 } {
+    return .{
+        .width = envInt(env, "COLUMNS", 90),
+        .height = envInt(env, "LINES", 24),
+    };
+}
+
+fn envInt(env: *const std.process.Environ.Map, name: []const u8, fallback: u16) u16 {
+    const value = env.get(name) orelse return fallback;
+    const parsed = std.fmt.parseInt(u16, value, 10) catch return fallback;
+    return parsed;
 }
