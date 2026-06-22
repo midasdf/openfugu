@@ -1,5 +1,8 @@
+const std = @import("std");
 const adapter = @import("adapter.zig");
+const config = @import("../config.zig");
 const types = @import("../core/types.zig");
+const runner = @import("../proc/runner.zig");
 
 pub const AgentReport = struct {
     name: []const u8,
@@ -20,4 +23,82 @@ pub fn report(name: []const u8, profile: adapter.Profile, auth: types.AuthKind, 
         .auth = auth,
         .runnable = is_runnable,
     };
+}
+
+pub const DetectSpec = struct {
+    name: []const u8,
+    version_argv: []const []const u8,
+    auth_argv: []const []const u8,
+    supported_version: []const u8,
+    profile: adapter.Profile,
+    subscription: config.SubscriptionConfig,
+};
+
+pub fn detect(allocator: std.mem.Allocator, io: std.Io, spec: DetectSpec) !AgentReport {
+    var version_result = runner.run(allocator, io, .{
+        .executable = spec.version_argv[0],
+        .argv = spec.version_argv,
+        .cwd = ".",
+        .stdout_tail_bytes = 2048,
+        .stderr_tail_bytes = 2048,
+        .timeout_ms = 1000,
+    }) catch return missing(spec.name);
+    defer version_result.deinit(allocator);
+
+    if (version_result.exit_code != 0) return missing(spec.name);
+
+    const version = std.mem.trim(u8, version_result.stdout_tail, " \n\r\t");
+    var auth_result = try runner.run(allocator, io, .{
+        .executable = spec.auth_argv[0],
+        .argv = spec.auth_argv,
+        .cwd = ".",
+        .stdout_tail_bytes = 2048,
+        .stderr_tail_bytes = 2048,
+        .timeout_ms = 1000,
+    });
+    defer auth_result.deinit(allocator);
+
+    const auth = if (auth_result.exit_code == 0) classifyAuth(auth_result.stdout_tail) else .unknown;
+    const compatibility: types.Compatibility = if (std.mem.eql(u8, version, spec.supported_version))
+        spec.profile.compatibility
+    else
+        .unknown;
+    const version_label = if (compatibility == .unknown) "unknown" else spec.supported_version;
+    const effective_profile = adapter.Profile{
+        .name = spec.profile.name,
+        .compatibility = compatibility,
+        .capability = spec.profile.capability,
+        .auth_check_argv = spec.profile.auth_check_argv,
+        .known_api_key_env = spec.profile.known_api_key_env,
+    };
+
+    return .{
+        .name = spec.name,
+        .compatibility = compatibility,
+        .auth = auth,
+        .runnable = adapter.runnable(spec.subscription, effective_profile, auth),
+        .exists = true,
+        .version = version_label,
+        .non_interactive = compatibility == .supported or compatibility == .degraded,
+        .structured_output = spec.profile.capability.structured_output and compatibility == .supported,
+        .overage_known = false,
+    };
+}
+
+fn missing(name: []const u8) AgentReport {
+    return .{
+        .name = name,
+        .compatibility = .unknown,
+        .auth = .unknown,
+        .runnable = false,
+        .exists = false,
+    };
+}
+
+fn classifyAuth(text: []const u8) types.AuthKind {
+    if (std.mem.indexOf(u8, text, "api_key") != null) return .api_key;
+    if (std.mem.indexOf(u8, text, "organization_subscription") != null) return .organization_subscription;
+    if (std.mem.indexOf(u8, text, "subscription") != null) return .subscription;
+    if (std.mem.indexOf(u8, text, "unauthenticated") != null) return .unauthenticated;
+    return .unknown;
 }

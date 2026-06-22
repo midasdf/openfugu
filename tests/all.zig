@@ -8,4 +8,5 @@ test {
     _ = @import("unit/refinement_test.zig");
     _ = @import("unit/cli_obs_test.zig");
     _ = @import("unit/config_doctor_test.zig");
+    _ = @import("unit/probe_test.zig");
 }

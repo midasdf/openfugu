@@ -58,14 +58,25 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const sleep_agent_step = b.addInstallArtifact(sleep_agent, .{});
+    const probe_cli = b.addExecutable(.{
+        .name = "openfugu-probe-cli",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/fixtures/probe_cli.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const probe_cli_step = b.addInstallArtifact(probe_cli, .{});
     tests.step.dependOn(&fake_agent_step.step);
     tests.step.dependOn(&check_file_step.step);
     tests.step.dependOn(&sleep_agent_step.step);
+    tests.step.dependOn(&probe_cli_step.step);
     const run_tests = b.addRunArtifact(tests);
     const test_options = b.addOptions();
     test_options.addOption([]const u8, "fake_agent_path", b.getInstallPath(.bin, "openfugu-fake-agent"));
     test_options.addOption([]const u8, "check_file_path", b.getInstallPath(.bin, "openfugu-check-file"));
     test_options.addOption([]const u8, "sleep_agent_path", b.getInstallPath(.bin, "openfugu-sleep-agent"));
+    test_options.addOption([]const u8, "probe_cli_path", b.getInstallPath(.bin, "openfugu-probe-cli"));
     test_mod.addOptions("test_options", test_options);
 
     const test_step = b.step("test", "Run unit tests");
