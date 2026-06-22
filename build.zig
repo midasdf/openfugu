@@ -31,7 +31,20 @@ pub fn build(b: *std.Build) void {
     const tests = b.addTest(.{
         .root_module = test_mod,
     });
+    const fake_agent = b.addExecutable(.{
+        .name = "openfugu-fake-agent",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/fixtures/fake_agent.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const fake_agent_step = b.addInstallArtifact(fake_agent, .{});
+    tests.step.dependOn(&fake_agent_step.step);
     const run_tests = b.addRunArtifact(tests);
+    const test_options = b.addOptions();
+    test_options.addOption([]const u8, "fake_agent_path", b.getInstallPath(.bin, "openfugu-fake-agent"));
+    test_mod.addOptions("test_options", test_options);
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);

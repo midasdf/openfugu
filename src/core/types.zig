@@ -136,7 +136,7 @@ pub const Task = struct {
 
 pub const TaskResult = struct {
     exit_code: ?u8,
-    signal: ?u8 = null,
+    signal: ?u32 = null,
     final_text: []const u8,
     stdout_tail: []const u8,
     stderr_tail: []const u8,
