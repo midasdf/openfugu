@@ -71,3 +71,19 @@ test "runner classifies timeout and reaps child" {
     try std.testing.expect(result.events.len >= 2);
     try std.testing.expectEqual(openfugu.protocol.EventKind.diagnostic, result.events[result.events.len - 2].kind);
 }
+
+test "signal cancellation terminates process group and reaps child" {
+    const sleep_agent = test_options.sleep_agent_path;
+    const argv = [_][]const u8{sleep_agent};
+
+    const result = try openfugu.signal.spawnThenCancel(std.testing.io, .{
+        .argv = &argv,
+        .cwd = ".",
+        .strategy = .{ .term_grace_ms = 1, .kill_after_grace = true },
+    });
+
+    try std.testing.expect(result.term_sent);
+    try std.testing.expect(result.kill_sent);
+    try std.testing.expect(result.reaped);
+    try std.testing.expect(result.canceled);
+}
