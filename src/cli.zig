@@ -203,6 +203,7 @@ pub const InteractiveInput = union(enum) {
     where_,
     worktrees,
     git,
+    log,
     diff,
     patch,
     verify,
@@ -246,6 +247,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":where") or std.mem.eql(u8, task, ":pwd")) return .where_;
     if (std.mem.eql(u8, task, ":worktrees")) return .worktrees;
     if (std.mem.eql(u8, task, ":git")) return .git;
+    if (std.mem.eql(u8, task, ":log")) return .log;
     if (std.mem.eql(u8, task, ":diff")) return .diff;
     if (std.mem.eql(u8, task, ":patch")) return .patch;
     if (std.mem.eql(u8, task, ":verify")) return .verify;
