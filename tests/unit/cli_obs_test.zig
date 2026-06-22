@@ -38,6 +38,41 @@ test "ledger omits content and redacts secret values by default" {
     try std.testing.expect(std.mem.indexOf(u8, line, "content_hash") != null);
 }
 
+test "ledger append creates owner-only jsonl file without secret content" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "ledger.jsonl" });
+    defer std.testing.allocator.free(path);
+
+    try openfugu.ledger.append(std.testing.allocator, std.testing.io, path, .{
+        .run_id = "r1",
+        .agent = "codex",
+        .content = "OPENAI_API_KEY=value-to-redact",
+        .include_content = false,
+    });
+    try openfugu.ledger.append(std.testing.allocator, std.testing.io, path, .{
+        .run_id = "r2",
+        .agent = "claude",
+        .content = "second event",
+        .include_content = false,
+    });
+
+    const line = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, std.testing.allocator, .limited(4096));
+    defer std.testing.allocator.free(line);
+    try std.testing.expect(std.mem.indexOf(u8, line, "content_hash") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "value-to-redact") == null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "\"run\":\"r1\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "\"run\":\"r2\"") != null);
+
+    const file = try std.Io.Dir.cwd().openFile(std.testing.io, path, .{});
+    defer file.close(std.testing.io);
+    const stat = try file.stat(std.testing.io);
+    try std.testing.expectEqual(@as(std.posix.mode_t, 0o600), stat.permissions.toMode() & 0o777);
+}
+
 test "usage summary distinguishes unavailable token counts" {
     const events = [_]openfugu.usage.Event{
         .{ .agent = "codex", .reported_tokens = null, .rate_limited = true, .ok = false },
