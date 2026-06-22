@@ -88,6 +88,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :patch   show git patch
                     \\  :verify  run local verification
                     \\  :cancel  cancel running task
+                    \\  :rerun   rerun last task
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
@@ -175,6 +176,10 @@ fn repl(init: std.process.Init) !u8 {
             .apply => {
                 dry_run = false;
                 try replaceLog(init.gpa, &last_output, "apply=true\n");
+                try writer.interface.writeAll(last_output);
+            },
+            .rerun => {
+                try replaceLog(init.gpa, &last_output, "no previous task\n");
                 try writer.interface.writeAll(last_output);
             },
             .plan => |task| {
@@ -286,6 +291,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":patch",
         ":verify",
         ":cancel",
+        ":rerun",
         ":dry-run",
         ":no-apply",
         ":apply",
@@ -315,6 +321,8 @@ fn rawRepl(init: std.process.Init) !u8 {
         for (input_history.items) |item| init.gpa.free(item);
         input_history.deinit();
     }
+    var last_task: ?[]u8 = null;
+    defer if (last_task) |task| init.gpa.free(task);
     var history_index: ?usize = null;
     var dry_run = false;
     var agent_filter: ?[]u8 = null;
@@ -399,15 +407,30 @@ fn rawRepl(init: std.process.Init) !u8 {
                     defer init.gpa.free(line);
                     try input.setValue("");
                     history_index = null;
+                    var rerun_task: ?[]const u8 = null;
                     switch (openfugu.cli.interactiveInput(line)) {
                         .empty => {},
                         .clear_history => {
                             for (input_history.items) |item| init.gpa.free(item);
                             input_history.clearRetainingCapacity();
+                            if (last_task) |task| init.gpa.free(task);
+                            last_task = null;
+                        },
+                        .rerun => {
+                            rerun_task = last_task orelse {
+                                try replaceLog(init.gpa, &last_output, "no previous task\n");
+                                continue;
+                            };
+                            try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n")));
+                        },
+                        .task => |task| {
+                            if (last_task) |old| init.gpa.free(old);
+                            last_task = try init.gpa.dupe(u8, task);
+                            try input_history.append(try init.gpa.dupe(u8, task));
                         },
                         else => try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n"))),
                     }
-                    const should_quit = try handleInteractiveLine(init, line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
+                    const should_quit = try handleInteractiveLine(init, rerun_task orelse line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
                     output_offset = null;
                     if (should_quit) return openfugu.cli.exit_ok;
                 },
@@ -596,6 +619,7 @@ fn handleInteractiveLine(
             \\  :patch   show git patch
             \\  :verify  run local verification
             \\  :cancel  cancel running task
+            \\  :rerun   rerun last task
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
@@ -652,6 +676,7 @@ fn handleInteractiveLine(
             dry_run.* = false;
             try replaceLog(init.gpa, last_output, "apply=true\n");
         },
+        .rerun => try replaceLog(init.gpa, last_output, "no previous task\n"),
         .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
         .replay => |run_id| try runReplay(init, last_output, run_id),
