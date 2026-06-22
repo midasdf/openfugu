@@ -38,6 +38,26 @@ test "ledger omits content and redacts secret values by default" {
     try std.testing.expect(std.mem.indexOf(u8, line, "content_hash") != null);
 }
 
+test "ledger includes verification and apply metadata without content" {
+    const line = try openfugu.ledger.format(std.testing.allocator, .{
+        .run_id = "r1",
+        .agent = "codex",
+        .content = "secret prompt",
+        .include_content = false,
+        .verification_passed = true,
+        .accepted = true,
+        .applied = true,
+        .reverified = true,
+    });
+    defer std.testing.allocator.free(line);
+
+    try std.testing.expect(std.mem.indexOf(u8, line, "\"verification_passed\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "\"accepted\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "\"applied\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "\"reverified\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "secret prompt") == null);
+}
+
 test "ledger append creates owner-only jsonl file without secret content" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

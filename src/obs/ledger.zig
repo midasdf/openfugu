@@ -6,17 +6,37 @@ pub const Event = struct {
     agent: []const u8,
     content: []const u8,
     include_content: bool = false,
+    verification_passed: bool = false,
+    accepted: bool = false,
+    applied: bool = false,
+    reverified: bool = false,
 };
 
 pub fn format(allocator: std.mem.Allocator, event: Event) ![]u8 {
     if (event.include_content) {
         const redacted = try config.redactKnownSecrets(allocator, event.content);
         defer allocator.free(redacted);
-        return std.fmt.allocPrint(allocator, "{{\"schema\":1,\"run\":\"{s}\",\"agent\":\"{s}\",\"content\":\"{s}\"}}\n", .{ event.run_id, event.agent, redacted });
+        return std.fmt.allocPrint(allocator, "{{\"schema\":1,\"run\":\"{s}\",\"agent\":\"{s}\",\"content\":\"{s}\",\"verification_passed\":{},\"accepted\":{},\"applied\":{},\"reverified\":{}}}\n", .{
+            event.run_id,
+            event.agent,
+            redacted,
+            event.verification_passed,
+            event.accepted,
+            event.applied,
+            event.reverified,
+        });
     }
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(event.content);
-    return std.fmt.allocPrint(allocator, "{{\"schema\":1,\"run\":\"{s}\",\"agent\":\"{s}\",\"content_hash\":\"{x}\"}}\n", .{ event.run_id, event.agent, hasher.final() });
+    return std.fmt.allocPrint(allocator, "{{\"schema\":1,\"run\":\"{s}\",\"agent\":\"{s}\",\"content_hash\":\"{x}\",\"verification_passed\":{},\"accepted\":{},\"applied\":{},\"reverified\":{}}}\n", .{
+        event.run_id,
+        event.agent,
+        hasher.final(),
+        event.verification_passed,
+        event.accepted,
+        event.applied,
+        event.reverified,
+    });
 }
 
 pub fn append(allocator: std.mem.Allocator, io: std.Io, path: []const u8, event: Event) !void {
