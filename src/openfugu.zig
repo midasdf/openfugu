@@ -1,4 +1,5 @@
 pub const config = @import("config.zig");
+pub const cli = @import("cli.zig");
 pub const types = @import("core/types.zig");
 pub const budget = @import("core/budget.zig");
 pub const adapter = @import("adapter/adapter.zig");
@@ -6,6 +7,11 @@ pub const antigravity = @import("adapter/antigravity.zig");
 pub const claude_code = @import("adapter/claude_code.zig");
 pub const codex = @import("adapter/codex.zig");
 pub const policy = @import("conductor/policy.zig");
+pub const recovery = @import("obs/recovery.zig");
+pub const ledger = @import("obs/ledger.zig");
+pub const replay = @import("obs/replay.zig");
+pub const trace = @import("obs/trace.zig");
+pub const usage = @import("obs/usage.zig");
 pub const environment = @import("proc/environment.zig");
 pub const conductor = @import("conductor/loop.zig");
 pub const refinement = @import("conductor/refinement.zig");
@@ -28,6 +34,7 @@ pub const fake = @import("adapter/fake.zig");
 
 test {
     _ = config;
+    _ = cli;
     _ = types;
     _ = budget;
     _ = adapter;
@@ -35,6 +42,11 @@ test {
     _ = claude_code;
     _ = codex;
     _ = policy;
+    _ = recovery;
+    _ = ledger;
+    _ = replay;
+    _ = trace;
+    _ = usage;
     _ = environment;
     _ = conductor;
     _ = refinement;

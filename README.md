@@ -28,3 +28,11 @@ zig fmt --check .
 ```
 
 Zig 0.16.0 is required.
+
+Real CLI smoke checks are opt-in because they can consume provider quota:
+
+```sh
+zig build smoke -Dreal-cli-tests=true
+```
+
+The normal test suite uses fake agents and temporary git repositories only.

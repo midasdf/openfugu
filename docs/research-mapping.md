@@ -6,3 +6,7 @@ access lists.
 
 The project does not implement coordinator training, reinforcement learning,
 private routers, or paper benchmark claims.
+
+TRINITY maps to role selection. Conductor maps to DAG nodes with explicit access
+lists. openfugu's final acceptance is objective command verification plus
+post-apply re-verification, not model self-judgment.

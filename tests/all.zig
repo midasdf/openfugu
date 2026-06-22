@@ -6,4 +6,5 @@ test {
     _ = @import("unit/adapter_contract_test.zig");
     _ = @import("unit/quota_policy_test.zig");
     _ = @import("unit/refinement_test.zig");
+    _ = @import("unit/cli_obs_test.zig");
 }

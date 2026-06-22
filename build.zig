@@ -59,4 +59,18 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
+
+    const real_cli_tests = b.option(bool, "real-cli-tests", "Enable quota-consuming real CLI smoke tests") orelse false;
+    const smoke_options = b.addOptions();
+    smoke_options.addOption(bool, "real_cli_tests", real_cli_tests);
+    const smoke_mod = b.createModule(.{
+        .root_source_file = b.path("tests/smoke.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    smoke_mod.addOptions("smoke_options", smoke_options);
+    const smoke_tests = b.addTest(.{ .root_module = smoke_mod });
+    const run_smoke = b.addRunArtifact(smoke_tests);
+    const smoke_step = b.step("smoke", "Run opt-in real CLI smoke tests");
+    smoke_step.dependOn(&run_smoke.step);
 }

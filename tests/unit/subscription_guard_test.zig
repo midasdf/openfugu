@@ -26,11 +26,11 @@ test "subscription-only environment strips known api key variables" {
 }
 
 test "redaction removes secret values from diagnostic text" {
-    const input = "OPENAI_API_KEY=sk-live ANTHROPIC_API_KEY=secret CODEx";
+    const input = "OPENAI_API_KEY=value-to-redact ANTHROPIC_API_KEY=secret CODEx";
     const redacted = try openfugu.config.redactKnownSecrets(std.testing.allocator, input);
     defer std.testing.allocator.free(redacted);
 
-    try std.testing.expect(std.mem.indexOf(u8, redacted, "sk-live") == null);
+    try std.testing.expect(std.mem.indexOf(u8, redacted, "value-to-redact") == null);
     try std.testing.expect(std.mem.indexOf(u8, redacted, "secret") == null);
     try std.testing.expect(std.mem.indexOf(u8, redacted, "CODEx") != null);
 }
