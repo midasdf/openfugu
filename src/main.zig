@@ -206,7 +206,9 @@ fn rawRepl(init: std.process.Init) !u8 {
             }
         }
 
-        try drawRaw(init, &term, input.getValue(), last_output, agents, history, dry_run, agent_filter, mode, planner, job != null);
+        const input_view = try input.view(init.gpa);
+        defer init.gpa.free(input_view);
+        try drawRaw(init, &term, input_view, last_output, agents, history, dry_run, agent_filter, mode, planner, job != null);
 
         var input_buf: [256]u8 = undefined;
         const read = try term.readInput(&input_buf, if (job == null) -1 else 100);
