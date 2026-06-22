@@ -791,10 +791,16 @@ fn taskExitCode(term: std.process.Child.Term) u8 {
 fn finishCompletedJob(allocator: std.mem.Allocator, job: *TaskJob, last_output: *[]u8) !void {
     job.thread.join();
     const text = job.text orelse "error: out of memory\n";
-    const output = try std.fmt.allocPrint(allocator, "exit={d}\n{s}", .{ job.code, text });
+    const output = try std.fmt.allocPrint(allocator, "result={s} exit={d}\n{s}", .{ taskResultLabel(job.code), job.code, text });
     defer allocator.free(output);
     try appendLog(allocator, last_output, job.label, output);
     job.deinit(allocator);
+}
+
+fn taskResultLabel(code: u8) []const u8 {
+    if (code == openfugu.cli.exit_ok) return "ok";
+    if (code == openfugu.cli.exit_sigint) return "canceled";
+    return "failed";
 }
 
 fn dupArgv(allocator: std.mem.Allocator, argv: []const []const u8) ![][]const u8 {
