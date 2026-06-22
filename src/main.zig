@@ -96,6 +96,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :build   run build
                     \\  :test    run tests
                     \\  :fmt     format Zig files
+                    \\  :check   run build, tests, and fmt check
                     \\  :cancel  cancel running task
                     \\  :rerun   rerun last task
                     \\  :save    save current output to file
@@ -183,6 +184,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .fmt => {
                 try runLocalFmt(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .check => {
+                try runLocalCheck(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .cancel => {
@@ -419,6 +424,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":build",
         ":test",
         ":fmt",
+        ":check",
         ":cancel",
         ":rerun",
         ":save ",
@@ -805,6 +811,7 @@ fn handleInteractiveLine(
             \\  :build   run build
             \\  :test    run tests
             \\  :fmt     format Zig files
+            \\  :check   run build, tests, and fmt check
             \\  :cancel  cancel running task
             \\  :rerun   rerun last task
             \\  :save    save current output to file
@@ -852,6 +859,7 @@ fn handleInteractiveLine(
         .build => try runLocalBuild(init, last_output),
         .test_ => try runLocalTests(init, last_output),
         .fmt => try runLocalFmt(init, last_output),
+        .check => try runLocalCheck(init, last_output),
         .cancel => {
             if (job.*) |running_job| {
                 running_job.cancel_requested.store(true, .release);
@@ -1302,6 +1310,14 @@ fn runLocalTests(init: std.process.Init, log: *[]u8) !void {
 fn runLocalFmt(init: std.process.Init, log: *[]u8) !void {
     try runVerificationCommands(init, log, ":fmt", &.{
         .{ .name = "fmt", .argv = &.{ "zig", "fmt", "." } },
+    });
+}
+
+fn runLocalCheck(init: std.process.Init, log: *[]u8) !void {
+    try runVerificationCommands(init, log, ":check", &.{
+        .{ .name = "build", .argv = &.{ "zig", "build" } },
+        .{ .name = "test", .argv = &.{ "zig", "build", "test" } },
+        .{ .name = "fmt", .argv = &.{ "zig", "fmt", "--check", "." } },
     });
 }
 

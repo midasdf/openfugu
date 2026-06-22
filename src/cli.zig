@@ -210,6 +210,7 @@ pub const InteractiveInput = union(enum) {
     build,
     test_,
     fmt,
+    check,
     cancel,
     help,
     status,
@@ -257,6 +258,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":build")) return .build;
     if (std.mem.eql(u8, task, ":test")) return .test_;
     if (std.mem.eql(u8, task, ":fmt")) return .fmt;
+    if (std.mem.eql(u8, task, ":check")) return .check;
     if (std.mem.eql(u8, task, ":cancel")) return .cancel;
     if (std.mem.eql(u8, task, ":help")) return .help;
     if (std.mem.eql(u8, task, ":status")) return .status;
