@@ -283,10 +283,10 @@ fn rawRepl(init: std.process.Init) !u8 {
     defer init.gpa.free(agents);
     var history = try init.gpa.dupe(u8, "No tasks yet.\n");
     defer init.gpa.free(history);
-    var task_history = std.array_list.Managed([]u8).init(init.gpa);
+    var input_history = std.array_list.Managed([]u8).init(init.gpa);
     defer {
-        for (task_history.items) |item| init.gpa.free(item);
-        task_history.deinit();
+        for (input_history.items) |item| init.gpa.free(item);
+        input_history.deinit();
     }
     var history_index: ?usize = null;
     var dry_run = false;
@@ -330,17 +330,17 @@ fn rawRepl(init: std.process.Init) !u8 {
             switch (key.key) {
                 .escape => return openfugu.cli.exit_ok,
                 .up => {
-                    if (task_history.items.len > 0) {
-                        const index = if (history_index) |current| current -| 1 else task_history.items.len - 1;
+                    if (input_history.items.len > 0) {
+                        const index = if (history_index) |current| current -| 1 else input_history.items.len - 1;
                         history_index = index;
-                        try input.setValue(task_history.items[index]);
+                        try input.setValue(input_history.items[index]);
                     }
                 },
                 .down => {
                     if (history_index) |current| {
-                        if (current + 1 < task_history.items.len) {
+                        if (current + 1 < input_history.items.len) {
                             history_index = current + 1;
-                            try input.setValue(task_history.items[current + 1]);
+                            try input.setValue(input_history.items[current + 1]);
                         } else {
                             history_index = null;
                             try input.setValue("");
@@ -355,12 +355,12 @@ fn rawRepl(init: std.process.Init) !u8 {
                     try input.setValue("");
                     history_index = null;
                     switch (openfugu.cli.interactiveInput(line)) {
-                        .task => try task_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n"))),
+                        .empty => {},
                         .clear_history => {
-                            for (task_history.items) |item| init.gpa.free(item);
-                            task_history.clearRetainingCapacity();
+                            for (input_history.items) |item| init.gpa.free(item);
+                            input_history.clearRetainingCapacity();
                         },
-                        else => {},
+                        else => try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n"))),
                     }
                     const should_quit = try handleInteractiveLine(init, line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
                     output_bottom = true;
