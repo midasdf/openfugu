@@ -92,6 +92,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :rerun   rerun last task
                     \\  :save    save current output to file
                     \\  :run     run shell command
+                    \\  :rg      search files with ripgrep
                     \\  :cd      change working directory
                     \\  :cwd     change working directory
                     \\  :load    run task text from file
@@ -195,6 +196,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .run => |command| {
                 try runShellCommand(init, &last_output, command);
+                try writer.interface.writeAll(last_output);
+            },
+            .rg => |pattern| {
+                try runRg(init, &last_output, pattern);
                 try writer.interface.writeAll(last_output);
             },
             .cwd => |path| {
@@ -368,6 +373,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":rerun",
         ":save ",
         ":run ",
+        ":rg ",
         ":cd ",
         ":cwd ",
         ":load ",
@@ -742,6 +748,7 @@ fn handleInteractiveLine(
             \\  :rerun   rerun last task
             \\  :save    save current output to file
             \\  :run     run shell command
+            \\  :rg      search files with ripgrep
             \\  :cd      change working directory
             \\  :cwd     change working directory
             \\  :load    run task text from file
@@ -813,6 +820,7 @@ fn handleInteractiveLine(
             job.* = try startTaskJob(init.gpa, init.io, &.{ "/bin/sh", "-lc", command }, command, false);
             try replaceLog(init.gpa, last_output, "command running\n");
         },
+        .rg => |pattern| try runRg(init, last_output, pattern),
         .cwd => |path| {
             if (job.* != null) {
                 try replaceLog(init.gpa, last_output, "task already running\n");
@@ -1099,6 +1107,25 @@ fn runGitDiff(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitPatch(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":patch", &.{ "git", "diff", "--no-ext-diff" }, "no patch\n");
+}
+
+fn runRg(init: std.process.Init, log: *[]u8, pattern: []const u8) !void {
+    var result = openfugu.runner.run(init.gpa, init.io, .{
+        .executable = "rg",
+        .argv = &.{ "rg", "-n", "--", pattern },
+        .cwd = ".",
+        .stdout_tail_bytes = 16 * 1024,
+        .stderr_tail_bytes = 2048,
+        .timeout_ms = 5000,
+    }) catch |err| {
+        const text = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+        defer init.gpa.free(text);
+        try appendLog(init.gpa, log, pattern, text);
+        return;
+    };
+    defer result.deinit(init.gpa);
+    const text = if (result.exit_code == 0) result.stdout_tail else if (result.exit_code == 1) "no matches\n" else result.stderr_tail;
+    try appendLog(init.gpa, log, pattern, if (text.len == 0) "no matches\n" else text);
 }
 
 fn runGitCommand(init: std.process.Init, log: *[]u8, label: []const u8, argv: []const []const u8, empty_text: []const u8) !void {
