@@ -335,3 +335,37 @@ test "tui dashboard includes agents and history" {
     try std.testing.expect(std.mem.indexOf(u8, screen, "History") != null);
     try std.testing.expect(std.mem.indexOf(u8, screen, "fix test") != null);
 }
+
+test "tui dashboard can show output from top" {
+    const output =
+        \\top-line
+        \\middle-line-1
+        \\middle-line-2
+        \\middle-line-3
+        \\middle-line-4
+        \\middle-line-5
+        \\bottom-line
+        \\
+    ;
+    const top_screen = try openfugu.tui.renderDashboardSized(std.testing.allocator, .{
+        .status = "ready apply",
+        .input = "",
+        .output = output,
+        .output_bottom = false,
+        .agents = "claude runnable\n",
+        .history = "No tasks yet.\n",
+    }, 80, 14);
+    defer std.testing.allocator.free(top_screen);
+    const bottom_screen = try openfugu.tui.renderDashboardSized(std.testing.allocator, .{
+        .status = "ready apply",
+        .input = "",
+        .output = output,
+        .output_bottom = true,
+        .agents = "claude runnable\n",
+        .history = "No tasks yet.\n",
+    }, 80, 14);
+    defer std.testing.allocator.free(bottom_screen);
+
+    try std.testing.expect(std.mem.indexOf(u8, top_screen, "top-line") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bottom_screen, "bottom-line") != null);
+}

@@ -5,6 +5,7 @@ pub const Dashboard = struct {
     status: []const u8,
     input: []const u8,
     output: []const u8,
+    output_bottom: bool = true,
     agents: []const u8,
     history: []const u8,
 };
@@ -30,7 +31,7 @@ pub fn renderDashboardSized(allocator: std.mem.Allocator, dashboard: Dashboard, 
     const main_width: u16 = @max(@as(u16, 20), inner_width -| side_width -| 2);
     const output_height: u16 = @max(4, height -| 12);
 
-    const output_view = try viewportText(allocator, dashboard.output, main_width, output_height, true);
+    const output_view = try viewportText(allocator, dashboard.output, main_width, output_height, dashboard.output_bottom);
     defer allocator.free(output_view);
     const agents_view = try viewportText(allocator, dashboard.agents, side_width, @max(@as(u16, 3), output_height / 2), false);
     defer allocator.free(agents_view);
@@ -50,7 +51,7 @@ pub fn renderDashboardSized(allocator: std.mem.Allocator, dashboard: Dashboard, 
         \\> {s}
         \\
         \\{s}
-    , .{ dashboard.status, side, output_view, dashboard.input, "Tab suggest  Up/Down history  :help commands  Esc quit" });
+    , .{ dashboard.status, side, output_view, dashboard.input, "Tab suggest  PgUp/PgDn output  :help commands  Esc quit" });
     defer allocator.free(body);
 
     const frame = (zz.Style{})
