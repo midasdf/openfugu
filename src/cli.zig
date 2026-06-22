@@ -215,6 +215,7 @@ pub const InteractiveInput = union(enum) {
     rerun,
     save: []const u8,
     run: []const u8,
+    cwd: []const u8,
     plan: []const u8,
     route: []const u8,
     replay: []const u8,
@@ -250,6 +251,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":rerun")) return .rerun;
     if (commandValue(task, ":save")) |value| return .{ .save = value };
     if (commandValue(task, ":run")) |value| return .{ .run = value };
+    if (commandValue(task, ":cwd")) |value| return .{ .cwd = value };
     if (commandValue(task, ":plan")) |value| return .{ .plan = value };
     if (commandValue(task, ":route")) |value| return .{ .route = value };
     if (commandValue(task, ":replay")) |value| return .{ .replay = value };

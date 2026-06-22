@@ -91,6 +91,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :rerun   rerun last task
                     \\  :save    save current output to file
                     \\  :run     run shell command
+                    \\  :cwd     change working directory
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
@@ -190,6 +191,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .run => |command| {
                 try runShellCommand(init, &last_output, command);
+                try writer.interface.writeAll(last_output);
+            },
+            .cwd => |path| {
+                try changeCwd(init, &last_output, path);
                 try writer.interface.writeAll(last_output);
             },
             .plan => |task| {
@@ -304,6 +309,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":rerun",
         ":save ",
         ":run ",
+        ":cwd ",
         ":dry-run",
         ":no-apply",
         ":apply",
@@ -634,6 +640,7 @@ fn handleInteractiveLine(
             \\  :rerun   rerun last task
             \\  :save    save current output to file
             \\  :run     run shell command
+            \\  :cwd     change working directory
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
@@ -693,6 +700,13 @@ fn handleInteractiveLine(
         .rerun => try replaceLog(init.gpa, last_output, "no previous task\n"),
         .save => |path| try saveOutput(init, last_output, path),
         .run => |command| try runShellCommand(init, last_output, command),
+        .cwd => |path| {
+            if (job.* != null) {
+                try replaceLog(init.gpa, last_output, "task already running\n");
+                return false;
+            }
+            try changeCwd(init, last_output, path);
+        },
         .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
         .replay => |run_id| try runReplay(init, last_output, run_id),
@@ -1075,6 +1089,15 @@ fn runShellCommand(init: std.process.Init, log: *[]u8, command: []const u8) !voi
     const text = try out.toOwnedSlice(init.gpa);
     defer init.gpa.free(text);
     try appendLog(init.gpa, log, command, text);
+}
+
+fn changeCwd(init: std.process.Init, log: *[]u8, path: []const u8) !void {
+    try std.process.setCurrentPath(init.io, path);
+    const cwd = try std.process.currentPathAlloc(init.io, init.gpa);
+    defer init.gpa.free(cwd);
+    const text = try std.fmt.allocPrint(init.gpa, "cwd={s}\n", .{cwd});
+    defer init.gpa.free(text);
+    try replaceLog(init.gpa, log, text);
 }
 
 fn replaceLog(allocator: std.mem.Allocator, log: *[]u8, text: []const u8) !void {
