@@ -23,6 +23,15 @@ test "cli fixture commands return plan doctor agents usage and replay text" {
     try std.testing.expect(std.mem.indexOf(u8, replay, "fixture-run") != null);
 }
 
+test "plan accepts explicit subscription planner flag and reports fallback" {
+    const plan = try openfugu.cli.runAlloc(std.testing.allocator, &.{ "openfugu", "plan", "--planner", "subscription-agent", "fix typo" });
+    defer std.testing.allocator.free(plan);
+
+    try std.testing.expect(std.mem.indexOf(u8, plan, "planner=subscription-agent") != null);
+    try std.testing.expect(std.mem.indexOf(u8, plan, "fallback=heuristic") != null);
+    try std.testing.expect(std.mem.indexOf(u8, plan, "topology=one_shot") != null);
+}
+
 test "ledger omits content and redacts secret values by default" {
     const event = openfugu.ledger.Event{
         .run_id = "r1",

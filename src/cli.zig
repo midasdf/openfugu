@@ -105,9 +105,12 @@ pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
 
     const cmd = args[1];
     if (std.mem.eql(u8, cmd, "plan")) {
-        if (args.len < 3) return error.InvalidArgs;
-        var plan = try heuristic.plan(allocator, .{ .request = args[2] });
+        const plan_args = try parsePlanArgs(args);
+        var plan = try heuristic.plan(allocator, .{ .request = plan_args.request });
         defer planner.deinitPlan(allocator, &plan);
+        if (std.mem.eql(u8, plan_args.backend, "subscription-agent")) {
+            return std.fmt.allocPrint(allocator, "planner=subscription-agent fallback=heuristic topology={s} quota=0\n", .{@tagName(plan.topology)});
+        }
         return std.fmt.allocPrint(allocator, "planner=heuristic topology={s} quota=0\n", .{@tagName(plan.topology)});
     }
     if (std.mem.eql(u8, cmd, "doctor")) {
@@ -167,6 +170,20 @@ fn takesValue(arg: []const u8) bool {
         std.mem.eql(u8, arg, "--agents") or
         std.mem.eql(u8, arg, "--planner") or
         std.mem.eql(u8, arg, "--depth");
+}
+
+const PlanArgs = struct {
+    backend: []const u8,
+    request: []const u8,
+};
+
+fn parsePlanArgs(args: []const []const u8) !PlanArgs {
+    if (args.len < 3) return error.InvalidArgs;
+    if (std.mem.eql(u8, args[2], "--planner")) {
+        if (args.len < 5) return error.InvalidArgs;
+        return .{ .backend = args[3], .request = args[4] };
+    }
+    return .{ .backend = "heuristic", .request = args[2] };
 }
 
 fn defaultAgentReports() []const probe.AgentReport {
