@@ -60,8 +60,8 @@ pub fn runWithProbeSpecs(
                 .code = exit_ok,
                 .text = try doctor.render(allocator, .{
                     .config_ok = true,
-                    .git_ok = true,
-                    .worktree_ok = true,
+                    .git_ok = gitOk(allocator, io),
+                    .worktree_ok = worktreeOk(allocator, io),
                     .subscription_only = true,
                     .agents = reports,
                 }),
@@ -183,6 +183,28 @@ fn collectReports(allocator: std.mem.Allocator, io: std.Io, specs: []const probe
         reports[i] = try probe.detect(allocator, io, spec);
     }
     return reports;
+}
+
+fn gitOk(allocator: std.mem.Allocator, io: std.Io) bool {
+    var result = runner.run(allocator, io, .{
+        .executable = "git",
+        .argv = &.{ "git", "rev-parse", "--is-inside-work-tree" },
+        .cwd = ".",
+        .timeout_ms = 1000,
+    }) catch return false;
+    defer result.deinit(allocator);
+    return result.exit_code == 0 and std.mem.indexOf(u8, result.stdout_tail, "true") != null;
+}
+
+fn worktreeOk(allocator: std.mem.Allocator, io: std.Io) bool {
+    var result = runner.run(allocator, io, .{
+        .executable = "git",
+        .argv = &.{ "git", "worktree", "list", "--porcelain" },
+        .cwd = ".",
+        .timeout_ms = 1000,
+    }) catch return false;
+    defer result.deinit(allocator);
+    return result.exit_code == 0;
 }
 
 fn runFirstRunnableSpec(allocator: std.mem.Allocator, io: std.Io, specs: []const probe.DetectSpec) !Result {
