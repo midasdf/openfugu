@@ -192,6 +192,11 @@ fn isHelp(arg: []const u8) bool {
 pub const InteractiveInput = union(enum) {
     empty,
     quit,
+    clear,
+    doctor,
+    agents,
+    help,
+    dry_run,
     task: []const u8,
 };
 
@@ -199,6 +204,11 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     const task = std.mem.trim(u8, input, " \t\r\n");
     if (task.len == 0) return .empty;
     if (std.mem.eql(u8, task, ":quit") or std.mem.eql(u8, task, ":exit")) return .quit;
+    if (std.mem.eql(u8, task, ":clear")) return .clear;
+    if (std.mem.eql(u8, task, ":doctor")) return .doctor;
+    if (std.mem.eql(u8, task, ":agents")) return .agents;
+    if (std.mem.eql(u8, task, ":help")) return .help;
+    if (std.mem.eql(u8, task, ":dry-run")) return .dry_run;
     return .{ .task = task };
 }
 

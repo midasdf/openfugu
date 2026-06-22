@@ -84,3 +84,4 @@ Use the `--no-apply` flag to perform dry runs.
 
 Running `openfugu` without arguments starts the ZigZag-based interactive TUI.
 Type a task to route and execute it, or type `:quit` to exit.
+The TUI also accepts `:doctor`, `:agents`, `:dry-run`, and `:clear`.

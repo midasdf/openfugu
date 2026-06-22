@@ -271,6 +271,11 @@ test "interactive input classifies prompt lines" {
     try std.testing.expectEqualStrings("fix README", openfugu.cli.interactiveInput("  fix README\n").task);
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.empty, openfugu.cli.interactiveInput(" \n"));
     try std.testing.expectEqual(openfugu.cli.InteractiveInput.quit, openfugu.cli.interactiveInput(":quit\n"));
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.clear, openfugu.cli.interactiveInput(":clear\n"));
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.doctor, openfugu.cli.interactiveInput(":doctor\n"));
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.agents, openfugu.cli.interactiveInput(":agents\n"));
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.help, openfugu.cli.interactiveInput(":help\n"));
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.dry_run, openfugu.cli.interactiveInput(":dry-run\n"));
 }
 
 test "tui render draws fullscreen frame" {
@@ -282,4 +287,12 @@ test "tui render draws fullscreen frame" {
     try std.testing.expect(std.mem.indexOf(u8, screen, "ready") != null);
     try std.testing.expect(std.mem.indexOf(u8, screen, "> fix README") != null);
     try std.testing.expect(std.mem.indexOf(u8, screen, "router=heuristic") != null);
+}
+
+test "tui render uses viewport and command help" {
+    const screen = try openfugu.tui.render(std.testing.allocator, "ready", "", "line1\nline2\nline3\n");
+    defer std.testing.allocator.free(screen);
+
+    try std.testing.expect(std.mem.indexOf(u8, screen, ":doctor") != null);
+    try std.testing.expect(std.mem.indexOf(u8, screen, "line3") != null);
 }
