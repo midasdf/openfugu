@@ -102,6 +102,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :cancel  cancel running task
                     \\  :rerun   rerun last task
                     \\  :save    save current output to file
+                    \\  :stage   stage file or path
                     \\  :commit  commit staged changes
                     \\  :run     run shell command
                     \\  :rg      search files with ripgrep
@@ -236,6 +237,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .save => |path| {
                 try saveOutput(init, &last_output, path);
+                try writer.interface.writeAll(last_output);
+            },
+            .stage => |path| {
+                try runGitStage(init, &last_output, path);
                 try writer.interface.writeAll(last_output);
             },
             .commit => |message| {
@@ -445,6 +450,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":cancel",
         ":rerun",
         ":save ",
+        ":stage ",
         ":commit ",
         ":run ",
         ":rg ",
@@ -835,6 +841,7 @@ fn handleInteractiveLine(
             \\  :cancel  cancel running task
             \\  :rerun   rerun last task
             \\  :save    save current output to file
+            \\  :stage   stage file or path
             \\  :commit  commit staged changes
             \\  :run     run shell command
             \\  :rg      search files with ripgrep
@@ -911,6 +918,7 @@ fn handleInteractiveLine(
         },
         .rerun => try replaceLog(init.gpa, last_output, "no previous task\n"),
         .save => |path| try saveOutput(init, last_output, path),
+        .stage => |path| try runGitStage(init, last_output, path),
         .commit => |message| try runGitCommit(init, last_output, message),
         .run => |command| {
             if (job.* != null) {
@@ -1219,6 +1227,10 @@ fn runGitStaged(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitPatch(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":patch", &.{ "git", "diff", "--no-ext-diff" }, "no patch\n");
+}
+
+fn runGitStage(init: std.process.Init, log: *[]u8, path: []const u8) !void {
+    try runGitCommand(init, log, ":stage", &.{ "git", "add", "--", path }, "staged\n");
 }
 
 fn runGitCommit(init: std.process.Init, log: *[]u8, message: []const u8) !void {
