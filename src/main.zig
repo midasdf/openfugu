@@ -20,17 +20,14 @@ pub fn main(init: std.process.Init) !u8 {
 }
 
 fn repl(init: std.process.Init) !u8 {
+    const fullscreen = (std.Io.File.stdin().isTty(init.io) catch false) and
+        (std.Io.File.stdout().isTty(init.io) catch false);
+    if (fullscreen) return rawRepl(init);
+
     var in_buf: [4096]u8 = undefined;
     var out_buf: [4096]u8 = undefined;
     var reader = std.Io.File.stdin().readerStreaming(init.io, &in_buf);
     var writer = std.Io.File.stdout().writer(init.io, &out_buf);
-    const fullscreen = std.Io.File.stdout().isTty(init.io) catch false;
-
-    if (fullscreen) try writer.interface.writeAll(zz.ansi.alt_screen_enter ++ zz.ansi.cursor_hide);
-    defer if (fullscreen) {
-        writer.interface.writeAll(zz.ansi.cursor_show ++ zz.ansi.alt_screen_exit) catch {};
-        writer.interface.flush() catch {};
-    };
 
     var last_output = try init.gpa.dupe(u8, "Type a task and press Enter.\n");
     defer init.gpa.free(last_output);
@@ -54,20 +51,7 @@ fn repl(init: std.process.Init) !u8 {
             planner,
         });
         defer init.gpa.free(status);
-        if (fullscreen) {
-            const size = tuiSize(init.environ_map);
-            const screen = try openfugu.tui.renderDashboardSized(init.gpa, .{
-                .status = status,
-                .input = "",
-                .output = last_output,
-                .agents = agents,
-                .history = history,
-            }, size.width, size.height);
-            defer init.gpa.free(screen);
-            try writer.interface.writeAll(screen);
-        } else {
-            try writer.interface.writeAll("openfugu TUI\n:type a task, :quit to exit\nopenfugu> ");
-        }
+        try writer.interface.writeAll("openfugu TUI\n:type a task, :quit to exit\nopenfugu> ");
         try writer.interface.flush();
 
         const line = try reader.interface.takeDelimiter('\n') orelse break;
@@ -77,7 +61,7 @@ fn repl(init: std.process.Init) !u8 {
             .clear => {
                 init.gpa.free(last_output);
                 last_output = try init.gpa.dupe(u8, "Cleared.\n");
-                if (!fullscreen) try writer.interface.writeAll(last_output);
+                try writer.interface.writeAll(last_output);
             },
             .help => {
                 try replaceLog(init.gpa, &last_output,
@@ -94,24 +78,24 @@ fn repl(init: std.process.Init) !u8 {
                     \\Type any other line to route and execute it.
                     \\
                 );
-                if (!fullscreen) try writer.interface.writeAll(last_output);
+                try writer.interface.writeAll(last_output);
             },
             .doctor => {
                 try runInteractiveCommand(init, &last_output, &.{ "openfugu", "doctor" }, ":doctor");
-                if (!fullscreen) try writer.interface.writeAll(last_output);
+                try writer.interface.writeAll(last_output);
             },
             .agents => {
                 const agent_text = try runCommandText(init, &.{ "openfugu", "agents" });
                 defer init.gpa.free(agent_text);
                 try replaceLog(init.gpa, &agents, agent_text);
                 try appendLog(init.gpa, &last_output, ":agents", agent_text);
-                if (!fullscreen) try writer.interface.writeAll(last_output);
+                try writer.interface.writeAll(last_output);
             },
             .dry_run => {
                 dry_run = !dry_run;
                 init.gpa.free(last_output);
                 last_output = try std.fmt.allocPrint(init.gpa, "dry-run={}\n", .{dry_run});
-                if (!fullscreen) try writer.interface.writeAll(last_output);
+                try writer.interface.writeAll(last_output);
             },
             .agent => |value| {
                 if (!validAgent(value)) {
@@ -121,7 +105,7 @@ fn repl(init: std.process.Init) !u8 {
                 if (agent_filter) |old| init.gpa.free(old);
                 agent_filter = if (std.mem.eql(u8, value, "auto")) null else try init.gpa.dupe(u8, value);
                 try replaceLog(init.gpa, &last_output, "agent updated\n");
-                if (!fullscreen) try writer.interface.writeAll(last_output);
+                try writer.interface.writeAll(last_output);
             },
             .mode => |value| {
                 if (!validMode(value)) {
@@ -131,7 +115,7 @@ fn repl(init: std.process.Init) !u8 {
                 init.gpa.free(mode);
                 mode = try init.gpa.dupe(u8, value);
                 try replaceLog(init.gpa, &last_output, "mode updated\n");
-                if (!fullscreen) try writer.interface.writeAll(last_output);
+                try writer.interface.writeAll(last_output);
             },
             .planner => |value| {
                 if (!validPlanner(value)) {
@@ -141,23 +125,10 @@ fn repl(init: std.process.Init) !u8 {
                 init.gpa.free(planner);
                 planner = try init.gpa.dupe(u8, value);
                 try replaceLog(init.gpa, &last_output, "planner updated\n");
-                if (!fullscreen) try writer.interface.writeAll(last_output);
+                try writer.interface.writeAll(last_output);
             },
             .task => |task| {
                 try appendHistory(init.gpa, &history, task);
-                if (fullscreen) {
-                    const size = tuiSize(init.environ_map);
-                    const screen = try openfugu.tui.renderDashboardSized(init.gpa, .{
-                        .status = if (dry_run) "running dry-run" else "running apply",
-                        .input = task,
-                        .output = last_output,
-                        .agents = agents,
-                        .history = history,
-                    }, size.width, size.height);
-                    defer init.gpa.free(screen);
-                    try writer.interface.writeAll(screen);
-                    try writer.interface.flush();
-                }
                 var args = std.array_list.Managed([]const u8).init(init.gpa);
                 defer args.deinit();
                 try args.append("openfugu");
@@ -190,11 +161,201 @@ fn repl(init: std.process.Init) !u8 {
                 };
                 defer result.deinit(init.gpa);
                 try appendLog(init.gpa, &last_output, task, result.text);
-                if (!fullscreen) try writer.interface.writeAll(result.text);
+                try writer.interface.writeAll(result.text);
             },
         }
     }
     return openfugu.cli.exit_ok;
+}
+
+fn rawRepl(init: std.process.Init) !u8 {
+    var env = zz.Environment.fromEnvMap(init.environ_map);
+    var term = try zz.Terminal.init(init.io, &env, .{ .alt_screen = true, .hide_cursor = false, .bracketed_paste = true });
+    defer term.deinit();
+
+    var input = zz.components.TextInput.init(init.gpa);
+    defer input.deinit();
+    input.setPlaceholder("type a task or :help");
+    input.setCharLimit(4096);
+
+    var last_output = try init.gpa.dupe(u8, "Type a task and press Enter.\n");
+    defer init.gpa.free(last_output);
+    var agents = try init.gpa.dupe(u8, ":agents to refresh\n");
+    defer init.gpa.free(agents);
+    var history = try init.gpa.dupe(u8, "No tasks yet.\n");
+    defer init.gpa.free(history);
+    var dry_run = false;
+    var agent_filter: ?[]u8 = null;
+    defer if (agent_filter) |value| init.gpa.free(value);
+    var mode = try init.gpa.dupe(u8, "auto");
+    defer init.gpa.free(mode);
+    var planner = try init.gpa.dupe(u8, "heuristic");
+    defer init.gpa.free(planner);
+
+    while (true) {
+        try drawRaw(init, &term, input.getValue(), last_output, agents, history, dry_run, agent_filter, mode, planner, false);
+
+        var input_buf: [256]u8 = undefined;
+        const read = try term.readInput(&input_buf, -1);
+        if (read == 0) continue;
+        const events = try zz.input.keyboard.parseAll(init.gpa, input_buf[0..read]);
+        defer init.gpa.free(events);
+        for (events) |event| {
+            if (event != .key) continue;
+            const key = event.key;
+            if (key.modifiers.ctrl and key.key == .char and key.key.char == 'c') return openfugu.cli.exit_ok;
+            switch (key.key) {
+                .escape => return openfugu.cli.exit_ok,
+                .enter => {
+                    const line = try init.gpa.dupe(u8, input.getValue());
+                    defer init.gpa.free(line);
+                    try input.setValue("");
+                    const should_quit = try handleInteractiveLine(init, line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term);
+                    if (should_quit) return openfugu.cli.exit_ok;
+                },
+                else => input.handleKey(key),
+            }
+        }
+    }
+}
+
+fn drawRaw(
+    init: std.process.Init,
+    term: *zz.Terminal,
+    input: []const u8,
+    output: []const u8,
+    agents: []const u8,
+    history: []const u8,
+    dry_run: bool,
+    agent_filter: ?[]const u8,
+    mode: []const u8,
+    planner: []const u8,
+    running: bool,
+) !void {
+    const size = term.getSize() catch null;
+    const fallback_size = tuiSize(init.environ_map);
+    const width = if (size) |value| value.cols else fallback_size.width;
+    const height = if (size) |value| value.rows else fallback_size.height;
+    const status = try std.fmt.allocPrint(init.gpa, "{s} agent={s} mode={s} planner={s}", .{
+        if (running) (if (dry_run) "running dry-run" else "running apply") else (if (dry_run) "ready dry-run" else "ready apply"),
+        agent_filter orelse "auto",
+        mode,
+        planner,
+    });
+    defer init.gpa.free(status);
+    const screen = try openfugu.tui.renderDashboardSized(init.gpa, .{
+        .status = status,
+        .input = input,
+        .output = output,
+        .agents = agents,
+        .history = history,
+    }, width, height);
+    defer init.gpa.free(screen);
+    try term.writer().writeAll(zz.ansi.screen_clear ++ zz.ansi.cursor_home);
+    try term.writer().writeAll(screen);
+    try term.flush();
+}
+
+fn handleInteractiveLine(
+    init: std.process.Init,
+    line: []const u8,
+    last_output: *[]u8,
+    agents: *[]u8,
+    history: *[]u8,
+    dry_run: *bool,
+    agent_filter: *?[]u8,
+    mode: *[]u8,
+    planner: *[]u8,
+    term: *zz.Terminal,
+) !bool {
+    switch (openfugu.cli.interactiveInput(line)) {
+        .empty => return false,
+        .quit => return true,
+        .clear => try replaceLog(init.gpa, last_output, "Cleared.\n"),
+        .help => try replaceLog(init.gpa, last_output,
+            \\Commands:
+            \\  :doctor  show agent health
+            \\  :agents  list runnable agents
+            \\  :dry-run toggle dry-run mode
+            \\  :agent   set agent: auto, claude, codex, agy
+            \\  :mode    set mode: auto, single, race, ensemble
+            \\  :planner set planner: heuristic, subscription-agent
+            \\  :clear   clear this session
+            \\  :quit    exit
+            \\
+            \\Type any other line to route and execute it.
+            \\
+        ),
+        .doctor => try runInteractiveCommand(init, last_output, &.{ "openfugu", "doctor" }, ":doctor"),
+        .agents => {
+            const agent_text = try runCommandText(init, &.{ "openfugu", "agents" });
+            defer init.gpa.free(agent_text);
+            try replaceLog(init.gpa, agents, agent_text);
+            try appendLog(init.gpa, last_output, ":agents", agent_text);
+        },
+        .dry_run => {
+            dry_run.* = !dry_run.*;
+            init.gpa.free(last_output.*);
+            last_output.* = try std.fmt.allocPrint(init.gpa, "dry-run={}\n", .{dry_run.*});
+        },
+        .agent => |value| {
+            if (!validAgent(value)) {
+                try replaceLog(init.gpa, last_output, "invalid agent\n");
+                return false;
+            }
+            if (agent_filter.*) |old| init.gpa.free(old);
+            agent_filter.* = if (std.mem.eql(u8, value, "auto")) null else try init.gpa.dupe(u8, value);
+            try replaceLog(init.gpa, last_output, "agent updated\n");
+        },
+        .mode => |value| {
+            if (!validMode(value)) {
+                try replaceLog(init.gpa, last_output, "invalid mode\n");
+                return false;
+            }
+            init.gpa.free(mode.*);
+            mode.* = try init.gpa.dupe(u8, value);
+            try replaceLog(init.gpa, last_output, "mode updated\n");
+        },
+        .planner => |value| {
+            if (!validPlanner(value)) {
+                try replaceLog(init.gpa, last_output, "invalid planner\n");
+                return false;
+            }
+            init.gpa.free(planner.*);
+            planner.* = try init.gpa.dupe(u8, value);
+            try replaceLog(init.gpa, last_output, "planner updated\n");
+        },
+        .task => |task| {
+            try appendHistory(init.gpa, history, task);
+            try drawRaw(init, term, task, last_output.*, agents.*, history.*, dry_run.*, agent_filter.*, mode.*, planner.*, true);
+            var args = std.array_list.Managed([]const u8).init(init.gpa);
+            defer args.deinit();
+            try args.append("openfugu");
+            if (dry_run.*) try args.append("--no-apply");
+            try args.append("--explain-routing");
+            if (agent_filter.*) |agent| {
+                try args.append("--agents");
+                try args.append(agent);
+            }
+            if (!std.mem.eql(u8, mode.*, "auto")) {
+                try args.append("--mode");
+                try args.append(mode.*);
+            }
+            if (!std.mem.eql(u8, planner.*, "heuristic")) {
+                try args.append("--planner");
+                try args.append(planner.*);
+            }
+            try args.append(task);
+            var result = openfugu.cli.runWithIo(init.gpa, init.io, args.items) catch |err| {
+                init.gpa.free(last_output.*);
+                last_output.* = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+                return false;
+            };
+            defer result.deinit(init.gpa);
+            try appendLog(init.gpa, last_output, task, result.text);
+        },
+    }
+    return false;
 }
 
 fn runInteractiveCommand(init: std.process.Init, log: *[]u8, args: []const []const u8, label: []const u8) !void {
