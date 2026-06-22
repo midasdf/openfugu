@@ -37,6 +37,33 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !Result {
     return .{ .code = exit_ok, .text = try runAlloc(allocator, args) };
 }
 
+pub fn runWithProbeSpecs(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    args: []const []const u8,
+    specs: []const probe.DetectSpec,
+) !Result {
+    if (args.len <= 1) return run(allocator, args);
+    if (std.mem.eql(u8, args[1], "doctor") or std.mem.eql(u8, args[1], "agents")) {
+        const reports = try collectReports(allocator, io, specs);
+        defer allocator.free(reports);
+        if (std.mem.eql(u8, args[1], "doctor")) {
+            return .{
+                .code = exit_ok,
+                .text = try doctor.render(allocator, .{
+                    .config_ok = true,
+                    .git_ok = true,
+                    .worktree_ok = true,
+                    .subscription_only = true,
+                    .agents = reports,
+                }),
+            };
+        }
+        return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
+    }
+    return run(allocator, args);
+}
+
 pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     if (args.len <= 1) return std.fmt.allocPrint(allocator, "openfugu {s}\n", .{config.version});
 
@@ -106,4 +133,13 @@ fn renderAgents(allocator: std.mem.Allocator, agents: []const probe.AgentReport)
         });
     }
     return out.toOwnedSlice(allocator);
+}
+
+fn collectReports(allocator: std.mem.Allocator, io: std.Io, specs: []const probe.DetectSpec) ![]probe.AgentReport {
+    const reports = try allocator.alloc(probe.AgentReport, specs.len);
+    errdefer allocator.free(reports);
+    for (specs, 0..) |spec, i| {
+        reports[i] = try probe.detect(allocator, io, spec);
+    }
+    return reports;
 }
