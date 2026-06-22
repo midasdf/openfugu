@@ -202,8 +202,12 @@ fn rawRepl(init: std.process.Init) !u8 {
     defer init.gpa.free(agents);
     var history = try init.gpa.dupe(u8, "No tasks yet.\n");
     defer init.gpa.free(history);
-    var last_task: ?[]u8 = null;
-    defer if (last_task) |value| init.gpa.free(value);
+    var task_history = std.array_list.Managed([]u8).init(init.gpa);
+    defer {
+        for (task_history.items) |item| init.gpa.free(item);
+        task_history.deinit();
+    }
+    var history_index: ?usize = null;
     var dry_run = false;
     var agent_filter: ?[]u8 = null;
     defer if (agent_filter) |value| init.gpa.free(value);
@@ -213,7 +217,8 @@ fn rawRepl(init: std.process.Init) !u8 {
     defer init.gpa.free(planner);
     // ponytail: one foreground task; add a queue/cancel path when parallel TUI work matters.
     var job: ?*TaskJob = null;
-    defer if (job) |running_job| finishJob(init.gpa, running_job);
+    // ponytail: quitting detaches the one worker; process exit reclaims it.
+    defer if (job) |running_job| running_job.thread.detach();
 
     while (true) {
         if (job) |running_job| {
@@ -242,17 +247,30 @@ fn rawRepl(init: std.process.Init) !u8 {
             switch (key.key) {
                 .escape => return openfugu.cli.exit_ok,
                 .up => {
-                    if (last_task) |task| try input.setValue(task);
+                    if (task_history.items.len > 0) {
+                        const index = if (history_index) |current| current -| 1 else task_history.items.len - 1;
+                        history_index = index;
+                        try input.setValue(task_history.items[index]);
+                    }
+                },
+                .down => {
+                    if (history_index) |current| {
+                        if (current + 1 < task_history.items.len) {
+                            history_index = current + 1;
+                            try input.setValue(task_history.items[current + 1]);
+                        } else {
+                            history_index = null;
+                            try input.setValue("");
+                        }
+                    }
                 },
                 .enter => {
                     const line = try init.gpa.dupe(u8, input.getValue());
                     defer init.gpa.free(line);
                     try input.setValue("");
+                    history_index = null;
                     switch (openfugu.cli.interactiveInput(line)) {
-                        .task => {
-                            if (last_task) |old| init.gpa.free(old);
-                            last_task = try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n"));
-                        },
+                        .task => try task_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n"))),
                         else => {},
                     }
                     const should_quit = try handleInteractiveLine(init, line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
@@ -450,11 +468,6 @@ fn taskWorker(job: *TaskJob, io: std.Io) void {
 fn finishCompletedJob(allocator: std.mem.Allocator, job: *TaskJob, last_output: *[]u8) !void {
     job.thread.join();
     try appendLog(allocator, last_output, job.label, job.text orelse "error: out of memory\n");
-    job.deinit(allocator);
-}
-
-fn finishJob(allocator: std.mem.Allocator, job: *TaskJob) void {
-    job.thread.join();
     job.deinit(allocator);
 }
 
