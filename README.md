@@ -53,3 +53,15 @@ back to local scoring if the router output is invalid. Add
 `--explain-routing` to print the route, preferred agent, score, and selected
 agent. Local scoring also uses prior accepted/failed outcomes from the local
 ledger.
+
+## Usage
+
+```sh
+# Run setup and dependency diagnostics
+openfugu doctor
+
+# View routing decisions and agent selection details
+openfugu --explain-routing "your task"
+```
+
+Use the `--no-apply` flag to perform dry runs.
