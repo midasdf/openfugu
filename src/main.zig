@@ -76,6 +76,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :route   preview routing without running
                     \\  :doctor  show agent health
                     \\  :agents  list runnable agents
+                    \\  :usage   show routing ledger summary
                     \\  :dry-run toggle dry-run mode
                     \\  :apply   return to apply mode
                     \\  :agent   set agent: auto, claude, codex, agy
@@ -99,6 +100,10 @@ fn repl(init: std.process.Init) !u8 {
                 defer init.gpa.free(agent_text);
                 try replaceLog(init.gpa, &agents, agent_text);
                 try appendLog(init.gpa, &last_output, ":agents", agent_text);
+                try writer.interface.writeAll(last_output);
+            },
+            .usage => {
+                try runInteractiveCommand(init, &last_output, &.{ "openfugu", "usage" }, ":usage");
                 try writer.interface.writeAll(last_output);
             },
             .status => {
@@ -211,6 +216,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":route ",
         ":doctor",
         ":agents",
+        ":usage",
         ":dry-run",
         ":apply",
         ":agent auto",
@@ -443,6 +449,7 @@ fn handleInteractiveLine(
             \\  :route   preview routing without running
             \\  :doctor  show agent health
             \\  :agents  list runnable agents
+            \\  :usage   show routing ledger summary
             \\  :dry-run toggle dry-run mode
             \\  :apply   return to apply mode
             \\  :agent   set agent: auto, claude, codex, agy
@@ -462,6 +469,7 @@ fn handleInteractiveLine(
             try replaceLog(init.gpa, agents, agent_text);
             try appendLog(init.gpa, last_output, ":agents", agent_text);
         },
+        .usage => try runInteractiveCommand(init, last_output, &.{ "openfugu", "usage" }, ":usage"),
         .status => try replaceStatusLog(init.gpa, last_output, dry_run.*, agent_filter.*, mode.*, planner.*, job.* != null),
         .reset_routing => {
             try resetRouting(init.gpa, dry_run, agent_filter, mode, planner);
