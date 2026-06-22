@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const openfugu = @import("openfugu");
 const zz = @import("zigzag");
 
@@ -83,6 +84,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :diff    show git diff stat
                     \\  :patch   show git patch
                     \\  :verify  run local verification
+                    \\  :cancel  cancel running task
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
@@ -129,6 +131,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .verify => {
                 try runLocalVerify(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .cancel => {
+                try replaceLog(init.gpa, &last_output, "no task running\n");
                 try writer.interface.writeAll(last_output);
             },
             .status => {
@@ -261,6 +267,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":diff",
         ":patch",
         ":verify",
+        ":cancel",
         ":dry-run",
         ":no-apply",
         ":apply",
@@ -298,11 +305,13 @@ fn rawRepl(init: std.process.Init) !u8 {
     defer init.gpa.free(mode);
     var planner = try init.gpa.dupe(u8, "heuristic");
     defer init.gpa.free(planner);
-    // ponytail: one foreground task; add a queue/cancel path when parallel TUI work matters.
+    // ponytail: one foreground task; add a queue if parallel TUI work matters.
     var job: ?*TaskJob = null;
     var output_offset: ?usize = null;
-    // ponytail: quitting detaches the one worker; process exit reclaims it.
-    defer if (job) |running_job| running_job.thread.detach();
+    defer if (job) |running_job| {
+        running_job.cancel_requested.store(true, .release);
+        running_job.thread.detach();
+    };
 
     while (true) {
         if (job) |running_job| {
@@ -328,7 +337,14 @@ fn rawRepl(init: std.process.Init) !u8 {
         for (events) |event| {
             if (event != .key) continue;
             const key = event.key;
-            if (key.modifiers.ctrl and key.key == .char and key.key.char == 'c') return openfugu.cli.exit_ok;
+            if (key.modifiers.ctrl and key.key == .char and key.key.char == 'c') {
+                if (job) |running_job| {
+                    running_job.cancel_requested.store(true, .release);
+                    try replaceLog(init.gpa, &last_output, "cancel requested\n");
+                    continue;
+                }
+                return openfugu.cli.exit_ok;
+            }
             switch (key.key) {
                 .escape => return openfugu.cli.exit_ok,
                 .up => {
@@ -379,6 +395,7 @@ fn rawRepl(init: std.process.Init) !u8 {
 const TaskJob = struct {
     thread: std.Thread,
     done: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+    cancel_requested: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     argv: [][]const u8,
     label: []u8,
     text: ?[]u8 = null,
@@ -550,6 +567,7 @@ fn handleInteractiveLine(
             \\  :diff    show git diff stat
             \\  :patch   show git patch
             \\  :verify  run local verification
+            \\  :cancel  cancel running task
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
@@ -577,6 +595,14 @@ fn handleInteractiveLine(
         .diff => try runGitDiff(init, last_output),
         .patch => try runGitPatch(init, last_output),
         .verify => try runLocalVerify(init, last_output),
+        .cancel => {
+            if (job.*) |running_job| {
+                running_job.cancel_requested.store(true, .release);
+                try replaceLog(init.gpa, last_output, "cancel requested\n");
+            } else {
+                try replaceLog(init.gpa, last_output, "no task running\n");
+            }
+        },
         .status => try replaceStatusLog(init.gpa, last_output, dry_run.*, agent_filter.*, mode.*, planner.*, if (job.*) |running_job| running_job.label else null),
         .reset_routing => {
             try resetRouting(init.gpa, dry_run, agent_filter, mode, planner);
@@ -662,6 +688,10 @@ fn startTaskJob(allocator: std.mem.Allocator, io: std.Io, argv: []const []const 
     errdefer allocator.destroy(job);
     const argv_copy = try dupArgv(allocator, argv);
     errdefer freeArgv(allocator, argv_copy);
+    const self_exe = try std.process.executablePathAlloc(io, allocator);
+    errdefer allocator.free(self_exe);
+    allocator.free(argv_copy[0]);
+    argv_copy[0] = self_exe;
     const label_copy = try allocator.dupe(u8, label);
     errdefer allocator.free(label_copy);
     job.* = .{
@@ -674,14 +704,79 @@ fn startTaskJob(allocator: std.mem.Allocator, io: std.Io, argv: []const []const 
 }
 
 fn taskWorker(job: *TaskJob, io: std.Io) void {
-    const result = openfugu.cli.runWithIo(std.heap.page_allocator, io, job.argv) catch |err| {
+    job.text = runTaskChild(job, io) catch |err| {
         job.text = std.fmt.allocPrint(std.heap.page_allocator, "error: {s}\n", .{@errorName(err)}) catch null;
         job.done.store(true, .release);
         return;
     };
-    job.code = result.code;
-    job.text = result.text;
     job.done.store(true, .release);
+}
+
+fn runTaskChild(job: *TaskJob, io: std.Io) ![]u8 {
+    var child = try std.process.spawn(io, .{
+        .argv = job.argv,
+        .stdin = .ignore,
+        .stdout = .pipe,
+        .stderr = .pipe,
+        .pgid = 0,
+    });
+    defer child.kill(io);
+
+    var multi_reader_buffer: std.Io.File.MultiReader.Buffer(2) = undefined;
+    var multi_reader: std.Io.File.MultiReader = undefined;
+    multi_reader.init(std.heap.page_allocator, io, multi_reader_buffer.toStreams(), &.{ child.stdout.?, child.stderr.? });
+    defer multi_reader.deinit();
+    _ = multi_reader.reader(0);
+    _ = multi_reader.reader(1);
+
+    read_loop: while (true) {
+        if (job.cancel_requested.load(.acquire)) {
+            _ = signalChildGroup(child, .TERM);
+            try io.sleep(std.Io.Duration.fromMilliseconds(250), .awake);
+            _ = signalChildGroup(child, .KILL);
+            _ = try child.wait(io);
+            job.code = openfugu.cli.exit_sigint;
+            return std.fmt.allocPrint(std.heap.page_allocator, "canceled\n", .{});
+        }
+        const timeout: std.Io.Timeout = .{ .duration = .{
+            .raw = std.Io.Duration.fromMilliseconds(100),
+            .clock = .awake,
+        } };
+        while (multi_reader.fill(64, timeout)) |_| {} else |err| {
+            switch (err) {
+                error.Timeout => continue,
+                error.EndOfStream => break :read_loop,
+                else => |e| return e,
+            }
+        }
+    }
+
+    try multi_reader.checkAnyError();
+    const term = try child.wait(io);
+    job.code = taskExitCode(term);
+    const stdout = try multi_reader.toOwnedSlice(0);
+    defer std.heap.page_allocator.free(stdout);
+    const stderr = try multi_reader.toOwnedSlice(1);
+    defer std.heap.page_allocator.free(stderr);
+    if (stderr.len == 0) return std.heap.page_allocator.dupe(u8, stdout);
+    return std.fmt.allocPrint(std.heap.page_allocator, "{s}{s}", .{ stdout, stderr });
+}
+
+fn signalChildGroup(child: std.process.Child, sig: std.posix.SIG) bool {
+    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return false;
+    const pid = child.id orelse return false;
+    std.posix.kill(-pid, sig) catch {
+        std.posix.kill(pid, sig) catch return false;
+    };
+    return true;
+}
+
+fn taskExitCode(term: std.process.Child.Term) u8 {
+    return switch (term) {
+        .exited => |code| code,
+        .signal => openfugu.cli.exit_sigint,
+        else => openfugu.cli.exit_planner,
+    };
 }
 
 fn finishCompletedJob(allocator: std.mem.Allocator, job: *TaskJob, last_output: *[]u8) !void {
