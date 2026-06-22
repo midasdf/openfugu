@@ -202,6 +202,8 @@ fn rawRepl(init: std.process.Init) !u8 {
     defer init.gpa.free(agents);
     var history = try init.gpa.dupe(u8, "No tasks yet.\n");
     defer init.gpa.free(history);
+    var last_task: ?[]u8 = null;
+    defer if (last_task) |value| init.gpa.free(value);
     var dry_run = false;
     var agent_filter: ?[]u8 = null;
     defer if (agent_filter) |value| init.gpa.free(value);
@@ -239,10 +241,20 @@ fn rawRepl(init: std.process.Init) !u8 {
             if (key.modifiers.ctrl and key.key == .char and key.key.char == 'c') return openfugu.cli.exit_ok;
             switch (key.key) {
                 .escape => return openfugu.cli.exit_ok,
+                .up => {
+                    if (last_task) |task| try input.setValue(task);
+                },
                 .enter => {
                     const line = try init.gpa.dupe(u8, input.getValue());
                     defer init.gpa.free(line);
                     try input.setValue("");
+                    switch (openfugu.cli.interactiveInput(line)) {
+                        .task => {
+                            if (last_task) |old| init.gpa.free(old);
+                            last_task = try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n"));
+                        },
+                        else => {},
+                    }
                     const should_quit = try handleInteractiveLine(init, line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
                     if (should_quit) return openfugu.cli.exit_ok;
                 },
