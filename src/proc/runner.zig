@@ -96,6 +96,9 @@ pub fn runInvocation(
     invocation: types.Invocation,
     timeout_ms: u64,
 ) !RunResult {
+    if (invocation.stdin.len != 0) {
+        return runInvocationWithStdin(allocator, io, invocation, timeout_ms);
+    }
     return run(allocator, io, .{
         .executable = invocation.executable,
         .argv = invocation.argv,
@@ -134,6 +137,94 @@ fn timeoutFromMs(timeout_ms: ?i64) std.Io.Timeout {
         .raw = std.Io.Duration.fromMilliseconds(ms),
         .clock = .awake,
     } };
+}
+
+fn runInvocationWithStdin(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    invocation: types.Invocation,
+    timeout_ms: u64,
+) !RunResult {
+    var s = session.Session.init("run");
+    try s.transition(.spawning);
+    try s.transition(.running);
+
+    var child = try std.process.spawn(io, .{
+        .argv = invocation.argv,
+        .cwd = .{ .path = invocation.cwd },
+        .stdin = .pipe,
+        .stdout = .pipe,
+        .stderr = .pipe,
+    });
+    defer child.kill(io);
+
+    try child.stdin.?.writeStreamingAll(io, invocation.stdin);
+    child.stdin.?.close(io);
+    child.stdin = null;
+
+    var multi_reader_buffer: std.Io.File.MultiReader.Buffer(2) = undefined;
+    var multi_reader: std.Io.File.MultiReader = undefined;
+    multi_reader.init(allocator, io, multi_reader_buffer.toStreams(), &.{ child.stdout.?, child.stderr.? });
+    defer multi_reader.deinit();
+
+    _ = multi_reader.reader(0);
+    _ = multi_reader.reader(1);
+    const timeout: std.Io.Timeout = .{ .duration = .{
+        .raw = std.Io.Duration.fromMilliseconds(timeoutFromUnsignedMs(timeout_ms)),
+        .clock = .awake,
+    } };
+
+    while (multi_reader.fill(64, timeout)) |_| {} else |err| switch (err) {
+        error.EndOfStream => {},
+        error.Timeout => {
+            try s.transition(.timed_out);
+            try s.transition(.reaped);
+            const events = try protocol.cloneEvents(allocator, &.{
+                .{ .kind = .status, .text = "spawned" },
+                .{ .kind = .diagnostic, .text = "timed_out" },
+                .{ .kind = .final, .text = "reaped" },
+            });
+            errdefer protocol.freeEvents(allocator, events);
+            return .{
+                .exit_code = null,
+                .signal = null,
+                .stdout_tail = try allocator.alloc(u8, 0),
+                .stderr_tail = try allocator.alloc(u8, 0),
+                .events = events,
+                .timed_out = true,
+                .canceled = false,
+            };
+        },
+        else => |e| return e,
+    }
+
+    try multi_reader.checkAnyError();
+    const term = try child.wait(io);
+    const stdout = try multi_reader.toOwnedSlice(0);
+    defer allocator.free(stdout);
+    const stderr = try multi_reader.toOwnedSlice(1);
+    defer allocator.free(stderr);
+
+    try s.transition(.draining);
+    try s.transition(.exited);
+    try s.transition(.reaped);
+
+    const events = try protocol.cloneEvents(allocator, &.{
+        .{ .kind = .status, .text = "spawned" },
+        .{ .kind = .diagnostic, .text = "captured" },
+        .{ .kind = .final, .text = "reaped" },
+    });
+    errdefer protocol.freeEvents(allocator, events);
+
+    return .{
+        .exit_code = exitCode(term),
+        .signal = exitSignal(term),
+        .stdout_tail = try tail(allocator, stdout, 4096),
+        .stderr_tail = try tail(allocator, stderr, 4096),
+        .events = events,
+        .timed_out = false,
+        .canceled = false,
+    };
 }
 
 fn writeLog(io: std.Io, log_path: ?[]const u8, stdout: []const u8, stderr: []const u8) !void {

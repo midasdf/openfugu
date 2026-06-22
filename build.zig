@@ -85,12 +85,22 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const write_file_agent_step = b.addInstallArtifact(write_file_agent, .{});
+    const stdin_echo_agent = b.addExecutable(.{
+        .name = "openfugu-stdin-echo-agent",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/fixtures/stdin_echo_agent.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const stdin_echo_agent_step = b.addInstallArtifact(stdin_echo_agent, .{});
     tests.step.dependOn(&fake_agent_step.step);
     tests.step.dependOn(&check_file_step.step);
     tests.step.dependOn(&sleep_agent_step.step);
     tests.step.dependOn(&probe_cli_step.step);
     tests.step.dependOn(&env_agent_step.step);
     tests.step.dependOn(&write_file_agent_step.step);
+    tests.step.dependOn(&stdin_echo_agent_step.step);
     const run_tests = b.addRunArtifact(tests);
     const test_options = b.addOptions();
     test_options.addOption([]const u8, "fake_agent_path", b.getInstallPath(.bin, "openfugu-fake-agent"));
@@ -99,6 +109,7 @@ pub fn build(b: *std.Build) void {
     test_options.addOption([]const u8, "probe_cli_path", b.getInstallPath(.bin, "openfugu-probe-cli"));
     test_options.addOption([]const u8, "env_agent_path", b.getInstallPath(.bin, "openfugu-env-agent"));
     test_options.addOption([]const u8, "write_file_agent_path", b.getInstallPath(.bin, "openfugu-write-file-agent"));
+    test_options.addOption([]const u8, "stdin_echo_agent_path", b.getInstallPath(.bin, "openfugu-stdin-echo-agent"));
     test_mod.addOptions("test_options", test_options);
 
     const test_step = b.step("test", "Run unit tests");

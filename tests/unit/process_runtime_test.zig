@@ -183,6 +183,24 @@ test "runner executes invocation through argv without shell" {
     try std.testing.expect(std.mem.indexOf(u8, result.stderr_tail, "fake err") != null);
 }
 
+test "runner passes invocation stdin to child process" {
+    const stdin_echo = test_options.stdin_echo_agent_path;
+    const argv = [_][]const u8{stdin_echo};
+
+    var result = try openfugu.runner.runInvocation(std.testing.allocator, std.testing.io, .{
+        .executable = stdin_echo,
+        .argv = &argv,
+        .cwd = ".",
+        .stdin = "context from broker",
+        .env_policy = .inherit_filtered,
+        .transport = .stdio,
+        .output_format = .text,
+    }, 1000);
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualStrings("context from broker", result.stdout_tail);
+}
+
 test "runner filters known api key environment for invocations" {
     const env_agent = test_options.env_agent_path;
     const argv = [_][]const u8{env_agent};
