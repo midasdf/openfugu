@@ -16,6 +16,9 @@ pub const Result = union(enum) {
 
 pub fn planOrFallback(allocator: std.mem.Allocator, req: Request, raw_output: []const u8) !types.WorkflowPlan {
     if (looksLikeWorkflowJson(raw_output)) {
+        if (std.mem.indexOf(u8, raw_output, "\"id\":2") != null) {
+            if (parseTwoNodeChain(allocator, raw_output)) |plan| return plan else |_| {}
+        }
         if (parseMinimalPlan(allocator, raw_output)) |plan| return plan else |_| {}
         return heuristic.plan(allocator, .{ .request = req.original_request });
     }
@@ -67,6 +70,64 @@ fn parseMinimalPlan(allocator: std.mem.Allocator, raw: []const u8) !types.Workfl
     errdefer planner.deinitPlan(allocator, &plan);
     try validate.validatePlan(plan);
     return plan;
+}
+
+fn parseTwoNodeChain(allocator: std.mem.Allocator, raw: []const u8) !types.WorkflowPlan {
+    const first = try objectContaining(raw, "\"id\":1");
+    const second = try objectContaining(raw, "\"id\":2");
+    const final_id = try firstArrayU64(raw, "\"final_nodes\"");
+    const rationale = try jsonStringTemp(raw, "\"rationale\"");
+
+    var nodes = try allocator.alloc(types.PlanNode, 2);
+    errdefer allocator.free(nodes);
+    nodes[0] = .{
+        .id = 1,
+        .role = try roleFromString(try jsonStringTemp(first, "\"role\"")),
+        .intent = try intentFromString(try jsonStringTemp(first, "\"intent\"")),
+        .selector = .any_healthy,
+        .instruction = try jsonStringTemp(first, "\"instruction\""),
+        .depends_on = try allocator.alloc(types.NodeId, 0),
+        .access = try allocator.dupe(types.ContextRef, &.{.original_request}),
+        .creates_candidate = jsonBool(first, "\"creates_candidate\"") orelse false,
+    };
+    errdefer {
+        allocator.free(nodes[0].depends_on);
+        allocator.free(nodes[0].access);
+    }
+    nodes[1] = .{
+        .id = 2,
+        .role = try roleFromString(try jsonStringTemp(second, "\"role\"")),
+        .intent = try intentFromString(try jsonStringTemp(second, "\"intent\"")),
+        .selector = .any_healthy,
+        .instruction = try jsonStringTemp(second, "\"instruction\""),
+        .depends_on = try allocator.dupe(types.NodeId, &.{1}),
+        .access = try allocator.dupe(types.ContextRef, &.{.{ .node_output = 1 }}),
+        .creates_candidate = jsonBool(second, "\"creates_candidate\"") orelse false,
+    };
+    errdefer {
+        allocator.free(nodes[1].depends_on);
+        allocator.free(nodes[1].access);
+    }
+
+    const final_nodes = try allocator.alloc(types.NodeId, 1);
+    final_nodes[0] = final_id;
+    errdefer allocator.free(final_nodes);
+
+    const plan = types.WorkflowPlan{
+        .topology = try topologyFromString(try jsonStringTemp(raw, "\"topology\"")),
+        .nodes = nodes,
+        .final_nodes = final_nodes,
+        .rationale = rationale,
+    };
+    try validate.validatePlan(plan);
+    return plan;
+}
+
+fn objectContaining(raw: []const u8, needle: []const u8) ![]const u8 {
+    const needle_pos = std.mem.indexOf(u8, raw, needle) orelse return error.MissingField;
+    const start = std.mem.lastIndexOfScalar(u8, raw[0..needle_pos], '{') orelse return error.InvalidJson;
+    const end_rel = std.mem.indexOfScalarPos(u8, raw, needle_pos, '}') orelse return error.InvalidJson;
+    return raw[start .. end_rel + 1];
 }
 
 fn jsonStringTemp(raw: []const u8, key: []const u8) ![]const u8 {

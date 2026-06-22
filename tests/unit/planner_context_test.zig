@@ -80,6 +80,25 @@ test "subscription planner accepts minimal validated json plan" {
     try std.testing.expectEqual(@as(openfugu.types.NodeId, 1), plan.final_nodes[0]);
 }
 
+test "subscription planner accepts two node chain json plan" {
+    const raw =
+        \\{"topology":"chain","nodes":[{"id":1,"role":"thinker","intent":"analyze","instruction":"inspect","creates_candidate":false},{"id":2,"role":"worker","intent":"implement","instruction":"apply fix","depends_on":[1],"access":[{"node_output":1}],"creates_candidate":true}],"final_nodes":[2],"rationale":"think then act"}
+    ;
+    var plan = try openfugu.subscription_agent.planOrFallback(std.testing.allocator, .{
+        .original_request = "fallback request",
+        .safe_repo_summary = "summary",
+    }, raw);
+    defer openfugu.planner.deinitPlan(std.testing.allocator, &plan);
+
+    try std.testing.expectEqual(openfugu.types.Topology.chain, plan.topology);
+    try std.testing.expectEqual(@as(usize, 2), plan.nodes.len);
+    try std.testing.expectEqual(openfugu.types.Role.thinker, plan.nodes[0].role);
+    try std.testing.expectEqual(openfugu.types.Role.worker, plan.nodes[1].role);
+    try std.testing.expectEqual(@as(openfugu.types.NodeId, 1), plan.nodes[1].depends_on[0]);
+    try std.testing.expectEqual(openfugu.types.ContextRef{ .node_output = 1 }, plan.nodes[1].access[0]);
+    try std.testing.expectEqual(@as(openfugu.types.NodeId, 2), plan.final_nodes[0]);
+}
+
 test "context broker includes only access-listed node output" {
     const outputs = [_]openfugu.context.NodeOutput{
         .{ .id = 1, .text = "allowed output" },
