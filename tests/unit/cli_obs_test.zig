@@ -106,6 +106,31 @@ test "usage summary distinguishes unavailable token counts" {
     try std.testing.expectEqual(@as(u64, 1), summary.rate_limits);
 }
 
+test "trace line includes required orchestration fields" {
+    const line = try openfugu.trace.line(std.testing.allocator, .{
+        .turn = 1,
+        .depth = 2,
+        .node = "n1",
+        .agent = "codex",
+        .role = .worker,
+        .intent = .implement,
+        .planner = "heuristic",
+        .verification = "passed",
+        .accepted = true,
+    });
+    defer std.testing.allocator.free(line);
+
+    try std.testing.expect(std.mem.indexOf(u8, line, "turn=1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "depth=2") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "node=n1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "agent=codex") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "role=worker") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "intent=implement") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "planner=heuristic") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "verification=passed") != null);
+    try std.testing.expect(std.mem.indexOf(u8, line, "accepted=true") != null);
+}
+
 test "recovery reports clean state when no process worktree branch or lock remains" {
     const result = openfugu.recovery.audit(.{
         .processes = 0,
