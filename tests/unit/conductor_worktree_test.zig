@@ -48,6 +48,57 @@ test "fake worker verifies applies and reverifies a git fixture" {
     try std.testing.expectEqualStrings("good\n", applied);
 }
 
+test "invocation worker runs in candidate worktree then verifies applies and reverifies" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+
+    const root = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "repo" });
+    defer std.testing.allocator.free(root);
+    const worktrees = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "worktrees" });
+    defer std.testing.allocator.free(worktrees);
+
+    try tmp.dir.createDirPath(std.testing.io, "repo");
+    try tmp.dir.createDirPath(std.testing.io, "worktrees");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "repo/answer.txt", .data = "bad\n" });
+    try git(root, &.{ "init", "-b", "main" });
+    try git(root, &.{ "config", "user.email", "openfugu@example.invalid" });
+    try git(root, &.{ "config", "user.name", "OpenFugu Test" });
+    try git(root, &.{ "add", "answer.txt" });
+    try git(root, &.{ "commit", "-m", "initial" });
+
+    const worker_argv = [_][]const u8{ test_options.write_file_agent_path, "answer.txt", "good\n" };
+    const check_argv = [_][]const u8{test_options.check_file_path};
+    var result = try openfugu.conductor.runInvocationSingle(std.testing.allocator, .{
+        .repo_path = root,
+        .worktree_root = worktrees,
+        .run_id = "run-invoke",
+        .candidate_id = "cand-invoke",
+        .agent_id = "fake",
+        .invocation = .{
+            .executable = test_options.write_file_agent_path,
+            .argv = &worker_argv,
+            .cwd = ".",
+        },
+        .timeout_ms = 1000,
+        .io = std.testing.io,
+        .verify_commands = &.{.{ .name = "check", .argv = &check_argv }},
+    });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expect(result.accepted);
+    try std.testing.expect(result.applied);
+    try std.testing.expect(result.reverified);
+
+    const applied_path = try std.fs.path.join(std.testing.allocator, &.{ root, "answer.txt" });
+    defer std.testing.allocator.free(applied_path);
+    const applied = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, applied_path, std.testing.allocator, .limited(1024));
+    defer std.testing.allocator.free(applied);
+    try std.testing.expectEqualStrings("good\n", applied);
+}
+
 test "workspace cleanup removes candidate worktree and branch" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
