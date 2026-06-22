@@ -2,6 +2,7 @@ const std = @import("std");
 const runner = @import("../proc/runner.zig");
 const types = @import("../core/types.zig");
 const verify = @import("../verify/commands.zig");
+const model_review = @import("../verify/model_review.zig");
 const workspace = @import("../workspace/worktree.zig");
 
 pub const FakeSingleRequest = struct {
@@ -27,6 +28,7 @@ pub const InvocationSingleRequest = struct {
     io: std.Io,
     verify_commands: []const verify.Command,
     apply: bool = true,
+    model_review: model_review.Review = .{},
 };
 
 pub const RunSummary = struct {
@@ -120,6 +122,15 @@ pub fn runInvocationSingle(allocator: std.mem.Allocator, req: InvocationSingleRe
     var candidate_verification = try verify.run(allocator, req.io, candidate.worktree_path, req.verify_commands);
     errdefer candidate_verification.deinit(allocator);
     if (!candidate_verification.passed) {
+        return .{
+            .accepted = false,
+            .applied = false,
+            .reverified = false,
+            .candidate_verification = candidate_verification,
+            .final_verification = try verify.run(allocator, req.io, req.repo_path, &.{}),
+        };
+    }
+    if (req.model_review.required and req.model_review.rejected) {
         return .{
             .accepted = false,
             .applied = false,

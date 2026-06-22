@@ -15,6 +15,7 @@ const verify = @import("verify/commands.zig");
 const types = @import("core/types.zig");
 const adapter = @import("adapter/adapter.zig");
 const ledger = @import("obs/ledger.zig");
+const model_review = @import("verify/model_review.zig");
 
 const claude_version_argv = [_][]const u8{ "claude", "--version" };
 const claude_auth_argv = [_][]const u8{ "claude", "auth", "status" };
@@ -123,7 +124,7 @@ pub fn runWithProbeSpecsInRepo(
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
     if (try taskText(args)) |task| {
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), reviewFromArgs(args));
     }
     return run(allocator, args);
 }
@@ -181,7 +182,10 @@ fn taskText(args: []const []const u8) !?[]const u8 {
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
-        if (std.mem.eql(u8, arg, "--subscription-only") or std.mem.eql(u8, arg, "--no-apply")) continue;
+        if (std.mem.eql(u8, arg, "--subscription-only") or
+            std.mem.eql(u8, arg, "--no-apply") or
+            std.mem.eql(u8, arg, "--require-model-review") or
+            std.mem.eql(u8, arg, "--reject-model-review")) continue;
         if (takesValue(arg)) {
             i += 1;
             if (i >= args.len) return error.InvalidArgs;
@@ -328,6 +332,7 @@ fn runFirstRunnableSpec(
     agents_filter: ?[]const u8,
     mode: ?[]const u8,
     depth: ?[]const u8,
+    review: model_review.Review,
 ) !Result {
     try std.Io.Dir.cwd().createDirPath(io, worktree_root);
     var saw_runnable = false;
@@ -351,6 +356,7 @@ fn runFirstRunnableSpec(
             .io = io,
             .verify_commands = verify_commands,
             .apply = !no_apply,
+            .model_review = review,
         });
         defer summary.deinit(allocator);
         const ledger_path = try runLedgerPath(allocator, worktree_root);
@@ -395,6 +401,14 @@ fn hasFlag(args: []const []const u8, flag: []const u8) bool {
         if (std.mem.eql(u8, arg, flag)) return true;
     }
     return false;
+}
+
+fn reviewFromArgs(args: []const []const u8) model_review.Review {
+    return .{
+        .required = hasFlag(args, "--require-model-review"),
+        .rejected = hasFlag(args, "--reject-model-review"),
+        .summary = if (hasFlag(args, "--reject-model-review")) "rejected by model review" else "",
+    };
 }
 
 fn optionValue(args: []const []const u8, flag: []const u8) ?[]const u8 {

@@ -350,6 +350,53 @@ test "task cli depth zero does not continue ensemble after verification failure"
     try std.testing.expect(std.mem.indexOf(u8, result.text, "agent=bad") != null);
 }
 
+test "task cli required model review rejection blocks candidate" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+    const root = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "repo" });
+    defer std.testing.allocator.free(root);
+    const worktrees = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "worktrees" });
+    defer std.testing.allocator.free(worktrees);
+
+    try tmp.dir.createDirPath(std.testing.io, "repo");
+    try tmp.dir.createDirPath(std.testing.io, "worktrees");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "repo/answer.txt", .data = "bad\n" });
+    try git(root, &.{ "init", "-b", "main" });
+    try git(root, &.{ "config", "user.email", "openfugu@example.invalid" });
+    try git(root, &.{ "config", "user.name", "OpenFugu Test" });
+    try git(root, &.{ "add", "answer.txt" });
+    try git(root, &.{ "commit", "-m", "initial" });
+
+    const worker_argv = [_][]const u8{ test_options.write_file_agent_path, "answer.txt", "good\n" };
+    const check_argv = [_][]const u8{test_options.check_file_path};
+    const specs = [_]openfugu.probe.DetectSpec{.{
+        .name = "fake",
+        .version_argv = &.{ test_options.probe_cli_path, "--version" },
+        .auth_argv = &.{ test_options.probe_cli_path, "auth" },
+        .task_argv = &worker_argv,
+        .supported_version = "supported-1",
+        .profile = openfugu.claude_code.profileForVersion("supported-1"),
+        .subscription = openfugu.config.Config.default().subscription,
+    }};
+
+    var result = try openfugu.cli.runWithProbeSpecsInRepo(
+        std.testing.allocator,
+        std.testing.io,
+        &.{ "openfugu", "--require-model-review", "--reject-model-review", "fix bug" },
+        &specs,
+        root,
+        worktrees,
+        &.{.{ .name = "check", .argv = &check_argv }},
+    );
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(openfugu.cli.exit_verify, result.code);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "accepted=false") != null);
+}
+
 fn git(cwd: []const u8, args: []const []const u8) !void {
     var result = try gitOutput(cwd, args);
     defer result.deinit(std.testing.allocator);
