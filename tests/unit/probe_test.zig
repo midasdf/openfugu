@@ -223,6 +223,65 @@ test "task cli honors agents filter" {
     try std.testing.expect(std.mem.indexOf(u8, result.text, "agent=pickme") != null);
 }
 
+test "task cli race tries next runnable candidate after verification failure" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+    const root = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "repo" });
+    defer std.testing.allocator.free(root);
+    const worktrees = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "worktrees" });
+    defer std.testing.allocator.free(worktrees);
+
+    try tmp.dir.createDirPath(std.testing.io, "repo");
+    try tmp.dir.createDirPath(std.testing.io, "worktrees");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "repo/answer.txt", .data = "bad\n" });
+    try git(root, &.{ "init", "-b", "main" });
+    try git(root, &.{ "config", "user.email", "openfugu@example.invalid" });
+    try git(root, &.{ "config", "user.name", "OpenFugu Test" });
+    try git(root, &.{ "add", "answer.txt" });
+    try git(root, &.{ "commit", "-m", "initial" });
+
+    const bad_worker_argv = [_][]const u8{ test_options.write_file_agent_path, "answer.txt", "wrong\n" };
+    const good_worker_argv = [_][]const u8{ test_options.write_file_agent_path, "answer.txt", "good\n" };
+    const check_argv = [_][]const u8{test_options.check_file_path};
+    const specs = [_]openfugu.probe.DetectSpec{
+        .{
+            .name = "bad",
+            .version_argv = &.{ test_options.probe_cli_path, "--version" },
+            .auth_argv = &.{ test_options.probe_cli_path, "auth" },
+            .task_argv = &bad_worker_argv,
+            .supported_version = "supported-1",
+            .profile = openfugu.claude_code.profileForVersion("supported-1"),
+            .subscription = openfugu.config.Config.default().subscription,
+        },
+        .{
+            .name = "good",
+            .version_argv = &.{ test_options.probe_cli_path, "--version" },
+            .auth_argv = &.{ test_options.probe_cli_path, "auth" },
+            .task_argv = &good_worker_argv,
+            .supported_version = "supported-1",
+            .profile = openfugu.claude_code.profileForVersion("supported-1"),
+            .subscription = openfugu.config.Config.default().subscription,
+        },
+    };
+
+    var result = try openfugu.cli.runWithProbeSpecsInRepo(
+        std.testing.allocator,
+        std.testing.io,
+        &.{ "openfugu", "--mode", "race", "fix bug" },
+        &specs,
+        root,
+        worktrees,
+        &.{.{ .name = "check", .argv = &check_argv }},
+    );
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(openfugu.cli.exit_ok, result.code);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "agent=good") != null);
+}
+
 fn git(cwd: []const u8, args: []const []const u8) !void {
     var result = try gitOutput(cwd, args);
     defer result.deinit(std.testing.allocator);

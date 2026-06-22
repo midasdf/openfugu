@@ -94,7 +94,7 @@ pub fn runWithProbeSpecsInRepo(
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
     if (try taskText(args)) |task| {
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"));
     }
     return run(allocator, args);
 }
@@ -261,13 +261,16 @@ fn runFirstRunnableSpec(
     task_text: []const u8,
     no_apply: bool,
     agents_filter: ?[]const u8,
+    mode: ?[]const u8,
 ) !Result {
     try std.Io.Dir.cwd().createDirPath(io, worktree_root);
+    var saw_runnable = false;
     for (specs) |spec| {
         if (!agentAllowed(agents_filter, spec.name)) continue;
         var report_value = try probe.detect(allocator, io, spec);
         defer report_value.deinit(allocator);
         if (!report_value.runnable) continue;
+        saw_runnable = true;
 
         var owned_invocation = try invocationForSpec(allocator, spec, task_text);
         defer owned_invocation.deinit(allocator);
@@ -285,14 +288,22 @@ fn runFirstRunnableSpec(
         });
         defer summary.deinit(allocator);
 
+        const code = if (summary.accepted and (no_apply or (summary.applied and summary.reverified))) exit_ok else exit_verify;
+        if (code != exit_ok and continuesAfterFailure(mode)) continue;
         return .{
-            .code = if (summary.accepted and (no_apply or (summary.applied and summary.reverified))) exit_ok else exit_verify,
+            .code = code,
             .text = try std.fmt.allocPrint(allocator, "agent={s} accepted={} applied={} reverified={}\n", .{
                 report_value.name,
                 summary.accepted,
                 summary.applied,
                 summary.reverified,
             }),
+        };
+    }
+    if (saw_runnable) {
+        return .{
+            .code = exit_verify,
+            .text = try allocator.dupe(u8, "no candidate passed verification\n"),
         };
     }
     return .{
@@ -324,6 +335,11 @@ fn agentAllowed(filter: ?[]const u8, name: []const u8) bool {
         if (std.mem.eql(u8, part, name)) return true;
     }
     return false;
+}
+
+fn continuesAfterFailure(mode: ?[]const u8) bool {
+    const value = mode orelse return false;
+    return std.mem.eql(u8, value, "race") or std.mem.eql(u8, value, "ensemble");
 }
 
 fn invocationForSpec(allocator: std.mem.Allocator, spec: probe.DetectSpec, task_text_value: []const u8) !adapter.OwnedInvocation {
