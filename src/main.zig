@@ -132,7 +132,7 @@ fn repl(init: std.process.Init) !u8 {
                 try writer.interface.writeAll(last_output);
             },
             .status => {
-                try replaceStatusLog(init.gpa, &last_output, dry_run, agent_filter, mode, planner, false);
+                try replaceStatusLog(init.gpa, &last_output, dry_run, agent_filter, mode, planner, null);
                 try writer.interface.writeAll(last_output);
             },
             .reset_routing => {
@@ -318,7 +318,7 @@ fn rawRepl(init: std.process.Init) !u8 {
 
         const input_view = try input.view(init.gpa);
         defer init.gpa.free(input_view);
-        try drawRaw(init, &term, input_view, last_output, agents, history, dry_run, agent_filter, mode, planner, job != null, output_offset);
+        try drawRaw(init, &term, input_view, last_output, agents, history, dry_run, agent_filter, mode, planner, if (job) |running_job| running_job.label else null, output_offset);
 
         var input_buf: [256]u8 = undefined;
         const read = try term.readInput(&input_buf, if (job == null) -1 else 100);
@@ -434,14 +434,14 @@ fn drawRaw(
     agent_filter: ?[]const u8,
     mode: []const u8,
     planner: []const u8,
-    running: bool,
+    running_label: ?[]const u8,
     output_offset: ?usize,
 ) !void {
     const size = term.getSize() catch null;
     const fallback_size = tuiSize(init.environ_map);
     const width = if (size) |value| value.cols else fallback_size.width;
     const height = if (size) |value| value.rows else fallback_size.height;
-    const status = try statusText(init.gpa, dry_run, agent_filter, mode, planner, running);
+    const status = try statusText(init.gpa, dry_run, agent_filter, mode, planner, running_label);
     defer init.gpa.free(status);
     const screen = try openfugu.tui.renderDashboardSized(init.gpa, .{
         .status = status,
@@ -464,10 +464,19 @@ fn statusText(
     agent_filter: ?[]const u8,
     mode: []const u8,
     planner: []const u8,
-    running: bool,
+    running_label: ?[]const u8,
 ) ![]u8 {
+    if (running_label) |label| {
+        return std.fmt.allocPrint(allocator, "{s} task={s} agent={s} mode={s} planner={s}", .{
+            if (dry_run) "running dry-run" else "running apply",
+            label,
+            agent_filter orelse "auto",
+            mode,
+            planner,
+        });
+    }
     return std.fmt.allocPrint(allocator, "{s} agent={s} mode={s} planner={s}", .{
-        if (running) (if (dry_run) "running dry-run" else "running apply") else (if (dry_run) "ready dry-run" else "ready apply"),
+        if (dry_run) "ready dry-run" else "ready apply",
         agent_filter orelse "auto",
         mode,
         planner,
@@ -481,9 +490,9 @@ fn replaceStatusLog(
     agent_filter: ?[]const u8,
     mode: []const u8,
     planner: []const u8,
-    running: bool,
+    running_label: ?[]const u8,
 ) !void {
-    const text = try statusText(allocator, dry_run, agent_filter, mode, planner, running);
+    const text = try statusText(allocator, dry_run, agent_filter, mode, planner, running_label);
     defer allocator.free(text);
     const line = try std.fmt.allocPrint(allocator, "{s}\n", .{text});
     defer allocator.free(line);
@@ -568,7 +577,7 @@ fn handleInteractiveLine(
         .diff => try runGitDiff(init, last_output),
         .patch => try runGitPatch(init, last_output),
         .verify => try runLocalVerify(init, last_output),
-        .status => try replaceStatusLog(init.gpa, last_output, dry_run.*, agent_filter.*, mode.*, planner.*, job.* != null),
+        .status => try replaceStatusLog(init.gpa, last_output, dry_run.*, agent_filter.*, mode.*, planner.*, if (job.*) |running_job| running_job.label else null),
         .reset_routing => {
             try resetRouting(init.gpa, dry_run, agent_filter, mode, planner);
             try replaceLog(init.gpa, last_output, "routing reset\n");
@@ -622,7 +631,7 @@ fn handleInteractiveLine(
                 return false;
             }
             try appendHistory(init.gpa, history, task);
-            try drawRaw(init, term, task, last_output.*, agents.*, history.*, dry_run.*, agent_filter.*, mode.*, planner.*, true, null);
+            try drawRaw(init, term, task, last_output.*, agents.*, history.*, dry_run.*, agent_filter.*, mode.*, planner.*, task, null);
             var args = std.array_list.Managed([]const u8).init(init.gpa);
             defer args.deinit();
             try args.append("openfugu");
