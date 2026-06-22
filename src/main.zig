@@ -856,7 +856,10 @@ fn runLedgerTail(init: std.process.Init, log: *[]u8) !void {
         return;
     };
     defer init.gpa.free(text);
-    const start = if (text.len > 8192) text.len - 8192 else 0;
+    var start = if (text.len > 8192) text.len - 8192 else 0;
+    if (start != 0) {
+        if (std.mem.indexOfScalar(u8, text[start..], '\n')) |newline| start += newline + 1;
+    }
     try appendLog(init.gpa, log, ":ledger", if (text.len == 0) "no ledger\n" else text[start..]);
 }
 
