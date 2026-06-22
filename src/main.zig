@@ -695,7 +695,9 @@ fn startTaskJob(allocator: std.mem.Allocator, io: std.Io, argv: []const []const 
     errdefer allocator.destroy(job);
     const argv_copy = try dupArgv(allocator, argv);
     errdefer freeArgv(allocator, argv_copy);
-    const self_exe = try std.process.executablePathAlloc(io, allocator);
+    const self_exe_z = try std.process.executablePathAlloc(io, allocator);
+    defer allocator.free(self_exe_z);
+    const self_exe = try allocator.dupe(u8, self_exe_z);
     errdefer allocator.free(self_exe);
     allocator.free(argv_copy[0]);
     argv_copy[0] = self_exe;
@@ -788,7 +790,10 @@ fn taskExitCode(term: std.process.Child.Term) u8 {
 
 fn finishCompletedJob(allocator: std.mem.Allocator, job: *TaskJob, last_output: *[]u8) !void {
     job.thread.join();
-    try appendLog(allocator, last_output, job.label, job.text orelse "error: out of memory\n");
+    const text = job.text orelse "error: out of memory\n";
+    const output = try std.fmt.allocPrint(allocator, "exit={d}\n{s}", .{ job.code, text });
+    defer allocator.free(output);
+    try appendLog(allocator, last_output, job.label, output);
     job.deinit(allocator);
 }
 
