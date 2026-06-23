@@ -118,6 +118,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :unstage unstage file or path
                     \\  :commit  commit staged changes
                     \\  :switch  switch git branch
+                    \\  :new-branch create and switch git branch
                     \\  :show    show commit summary
                     \\  :run     run shell command
                     \\  :rg      search files with ripgrep
@@ -318,6 +319,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .switch_branch => |branch| {
                 try runGitSwitch(init, &last_output, branch);
+                try writer.interface.writeAll(last_output);
+            },
+            .new_branch => |branch| {
+                try runGitNewBranch(init, &last_output, branch);
                 try writer.interface.writeAll(last_output);
             },
             .show => |rev| {
@@ -589,6 +594,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":unstage ",
         ":commit ",
         ":switch ",
+        ":new-branch ",
         ":show ",
         ":run ",
         ":rg ",
@@ -997,6 +1003,7 @@ fn handleInteractiveLine(
             \\  :unstage unstage file or path
             \\  :commit  commit staged changes
             \\  :switch  switch git branch
+            \\  :new-branch create and switch git branch
             \\  :show    show commit summary
             \\  :run     run shell command
             \\  :rg      search files with ripgrep
@@ -1091,6 +1098,7 @@ fn handleInteractiveLine(
         .unstage => |path| try runGitUnstage(init, last_output, path),
         .commit => |message| try runGitCommit(init, last_output, message),
         .switch_branch => |branch| try runGitSwitch(init, last_output, branch),
+        .new_branch => |branch| try runGitNewBranch(init, last_output, branch),
         .show => |rev| try runGitShow(init, last_output, rev),
         .run => |command| {
             if (job.* != null) {
@@ -1441,6 +1449,10 @@ fn runGitCommit(init: std.process.Init, log: *[]u8, message: []const u8) !void {
 
 fn runGitSwitch(init: std.process.Init, log: *[]u8, branch: []const u8) !void {
     try runGitCommand(init, log, ":switch", &.{ "git", "switch", branch }, "switched\n");
+}
+
+fn runGitNewBranch(init: std.process.Init, log: *[]u8, branch: []const u8) !void {
+    try runGitCommand(init, log, ":new-branch", &.{ "git", "switch", "-c", branch }, "created branch\n");
 }
 
 fn runGitShow(init: std.process.Init, log: *[]u8, rev: []const u8) !void {

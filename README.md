@@ -91,7 +91,7 @@ the output top or bottom, or type `:quit` to exit.
 Input history is stored in `.openfugu/tui-history`.
 The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:ledger`,
 `:where`, `:pwd`, `:worktrees`, `:git`, `:changed`, `:remote`, `:branch`, `:log`, `:diff`, `:staged`, `:patch`, `:ci`, `:watch-ci`, `:pr`, `:pr <number-or-url>`, `:pr-checkout <number-or-url>`, `:issues`, `:issue <number-or-url>`, `:verify`, `:build`, `:test`, `:fmt`, `:check`, `:fetch`, `:pull`, `:push`, `:cancel`,
-`:rerun`, `:save <file>`, `:stage <path>`, `:unstage <path>`, `:commit <message>`, `:switch <branch>`, `:show <rev>`, `:run <command>`, `:rg <pattern>`, `:todo`, `:ls [path]`, `:files [path]`,
+`:rerun`, `:save <file>`, `:stage <path>`, `:unstage <path>`, `:commit <message>`, `:switch <branch>`, `:new-branch <branch>`, `:show <rev>`, `:run <command>`, `:rg <pattern>`, `:todo`, `:ls [path]`, `:files [path]`,
 `:cd <path>`, `:cwd <path>`, `:load <file>`,
 `:open <file[:line]>` with line numbers, `:head <file>`, `:tail <file>`, `:dry-run`, `:no-apply`, `:apply`,
 `:agent <name>`, `:mode <name>`, `:planner <name>`, `:reset-routing`,

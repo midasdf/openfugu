@@ -328,6 +328,7 @@ test "interactive input classifies prompt lines" {
     try std.testing.expectEqualStrings("README.md", openfugu.cli.interactiveInput(":unstage README.md\n").unstage);
     try std.testing.expectEqualStrings("add tui command", openfugu.cli.interactiveInput(":commit add tui command\n").commit);
     try std.testing.expectEqualStrings("feature/tui", openfugu.cli.interactiveInput(":switch feature/tui\n").switch_branch);
+    try std.testing.expectEqualStrings("feature/new", openfugu.cli.interactiveInput(":new-branch feature/new\n").new_branch);
     try std.testing.expectEqualStrings("HEAD", openfugu.cli.interactiveInput(":show HEAD\n").show);
     try std.testing.expectEqualStrings("12", openfugu.cli.interactiveInput(":issue 12\n").issue);
     try std.testing.expectEqualStrings("34", openfugu.cli.interactiveInput(":pr 34\n").pr_view);

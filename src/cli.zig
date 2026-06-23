@@ -235,6 +235,7 @@ pub const InteractiveInput = union(enum) {
     unstage: []const u8,
     commit: []const u8,
     switch_branch: []const u8,
+    new_branch: []const u8,
     show: []const u8,
     issue: []const u8,
     pr_view: []const u8,
@@ -304,6 +305,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (commandValue(task, ":unstage")) |value| return .{ .unstage = value };
     if (commandValue(task, ":commit")) |value| return .{ .commit = value };
     if (commandValue(task, ":switch")) |value| return .{ .switch_branch = value };
+    if (commandValue(task, ":new-branch")) |value| return .{ .new_branch = value };
     if (commandValue(task, ":show")) |value| return .{ .show = value };
     if (commandValue(task, ":issue")) |value| return .{ .issue = value };
     if (commandValue(task, ":pr-checkout")) |value| return .{ .pr_checkout = value };
