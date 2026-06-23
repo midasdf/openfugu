@@ -98,6 +98,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :patch   show git patch
                     \\  :ci      show recent GitHub Actions runs
                     \\  :watch-ci watch latest GitHub Actions run
+                    \\  :pr      show GitHub pull request status
                     \\  :verify  run local verification
                     \\  :build   run build
                     \\  :test    run tests
@@ -207,6 +208,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .watch_ci => {
                 try runWatchCi(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .pr => {
+                try runPrStatus(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .verify => {
@@ -539,6 +544,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":patch",
         ":ci",
         ":watch-ci",
+        ":pr",
         ":verify",
         ":build",
         ":test",
@@ -941,6 +947,7 @@ fn handleInteractiveLine(
             \\  :patch   show git patch
             \\  :ci      show recent GitHub Actions runs
             \\  :watch-ci watch latest GitHub Actions run
+            \\  :pr      show GitHub pull request status
             \\  :verify  run local verification
             \\  :build   run build
             \\  :test    run tests
@@ -1004,6 +1011,7 @@ fn handleInteractiveLine(
         .patch => try runGitPatch(init, last_output),
         .ci => try runCi(init, last_output),
         .watch_ci => try runWatchCi(init, last_output),
+        .pr => try runPrStatus(init, last_output),
         .verify => try runLocalVerify(init, last_output),
         .build => try runLocalBuild(init, last_output),
         .test_ => try runLocalTests(init, last_output),
@@ -1416,6 +1424,10 @@ fn runWatchCi(init: std.process.Init, log: *[]u8) !void {
     defer result.deinit(init.gpa);
     const text = if (result.exit_code == 0) result.stdout_tail else if (result.stderr_tail.len != 0) result.stderr_tail else result.stdout_tail;
     try appendLog(init.gpa, log, ":watch-ci", if (text.len == 0) "ci complete\n" else text);
+}
+
+fn runPrStatus(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":pr", &.{ "gh", "pr", "status" }, "no pull requests\n");
 }
 
 fn runRg(init: std.process.Init, log: *[]u8, pattern: []const u8) !void {
