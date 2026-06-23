@@ -253,6 +253,7 @@ pub const InteractiveInput = union(enum) {
     head: []const u8,
     tail: []const u8,
     plan: []const u8,
+    route_last,
     route: []const u8,
     replay: []const u8,
     agent: []const u8,
@@ -328,6 +329,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (commandValue(task, ":head")) |value| return .{ .head = value };
     if (commandValue(task, ":tail")) |value| return .{ .tail = value };
     if (commandValue(task, ":plan")) |value| return .{ .plan = value };
+    if (std.mem.eql(u8, task, ":route")) return .route_last;
     if (commandValue(task, ":route")) |value| return .{ .route = value };
     if (commandValue(task, ":replay")) |value| return .{ .replay = value };
     if (commandValue(task, ":agent")) |value| return .{ .agent = value };
