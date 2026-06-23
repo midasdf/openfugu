@@ -92,6 +92,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :changed show changed file names
                     \\  :remote  show git remotes
                     \\  :branch  show current git branch
+                    \\  :branches show git branches
                     \\  :log     show recent commits
                     \\  :diff    show git diff stat
                     \\  :staged  show staged diff stat
@@ -190,6 +191,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .branch => {
                 try runGitBranch(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .branches => {
+                try runGitBranches(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .log => {
@@ -568,6 +573,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":changed",
         ":remote",
         ":branch",
+        ":branches",
         ":log",
         ":diff",
         ":staged",
@@ -977,6 +983,7 @@ fn handleInteractiveLine(
             \\  :changed show changed file names
             \\  :remote  show git remotes
             \\  :branch  show current git branch
+            \\  :branches show git branches
             \\  :log     show recent commits
             \\  :diff    show git diff stat
             \\  :staged  show staged diff stat
@@ -1047,6 +1054,7 @@ fn handleInteractiveLine(
         .changed => try runGitChanged(init, last_output),
         .remote => try runGitRemote(init, last_output),
         .branch => try runGitBranch(init, last_output),
+        .branches => try runGitBranches(init, last_output),
         .log => try runGitLog(init, last_output),
         .diff => try runGitDiff(init, last_output),
         .staged => try runGitStaged(init, last_output),
@@ -1405,6 +1413,10 @@ fn runGitRemote(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitBranch(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":branch", &.{ "git", "branch", "--show-current" }, "detached\n");
+}
+
+fn runGitBranches(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":branches", &.{ "git", "branch", "--all", "--verbose" }, "no branches\n");
 }
 
 fn runGitLog(init: std.process.Init, log: *[]u8) !void {
