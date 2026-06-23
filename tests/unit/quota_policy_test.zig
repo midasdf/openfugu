@@ -75,3 +75,17 @@ test "fast router hint rejects invalid json and scores preferred agent" {
     try std.testing.expectEqual(openfugu.policy.TaskKind.review, escaped.kind.?);
     try std.testing.expectEqual(openfugu.policy.PreferredAgent.claude, escaped.preferred_agent);
 }
+
+test "policy routes frontend design work toward antigravity fallback" {
+    const kind = openfugu.policy.classifyTask("polish the frontend UI layout");
+    try std.testing.expectEqual(openfugu.policy.TaskKind.frontend, kind);
+    try std.testing.expect(openfugu.policy.scoreAgent(.{
+        .id = "agy",
+        .profile_name = "antigravity",
+        .kind = kind,
+    }) > openfugu.policy.scoreAgent(.{
+        .id = "codex",
+        .profile_name = "codex",
+        .kind = kind,
+    }));
+}

@@ -8,6 +8,7 @@ pub const TaskKind = enum {
     refactor,
     terminal,
     review,
+    frontend,
     broad,
 };
 
@@ -61,6 +62,7 @@ pub fn classifyTask(text: []const u8) TaskKind {
     if (hasAny(text, &.{ "test", "spec", "failing", "failure" })) return .test_fix;
     if (hasAny(text, &.{ "terminal", "shell", "command", "script" })) return .terminal;
     if (hasAny(text, &.{ "review", "audit", "security" })) return .review;
+    if (hasAny(text, &.{ "frontend", "ui", "ux", "layout", "design", "web app" })) return .frontend;
     if (hasAny(text, &.{ "refactor", "rename", "cleanup" })) return .refactor;
     if (hasAny(text, &.{ "bug", "fix", "crash", "error" })) return .bugfix;
     if (hasAny(text, &.{ "broad", "architecture", "design" })) return .broad;
@@ -72,12 +74,18 @@ pub fn scoreAgent(input: ScoreInput) i64 {
     if (preferredMatches(input)) score += 100;
     switch (input.kind) {
         .test_fix, .terminal => {
-            if (isCodex(input)) score += 30;
-            if (isClaude(input)) score += 10;
+            if (isCodex(input)) score += 60;
+            if (isClaude(input)) score += 15;
+            if (isAntigravity(input)) score -= 30;
         },
         .bugfix, .refactor, .review, .broad => {
             if (isClaude(input)) score += 25;
             if (isCodex(input)) score += 15;
+        },
+        .frontend => {
+            if (isAntigravity(input)) score += 35;
+            if (isClaude(input)) score += 15;
+            if (isCodex(input)) score += 10;
         },
         .general => {
             if (isClaude(input)) score += 10;
@@ -87,7 +95,7 @@ pub fn scoreAgent(input: ScoreInput) i64 {
     if (isAntigravity(input)) score += 5;
     if (input.calls != 0) {
         score += @as(i64, @intCast(input.successes * 10));
-        score -= @as(i64, @intCast(input.failures * 15));
+        score -= @as(i64, @intCast(input.failures * 50));
     }
     return score;
 }
@@ -142,6 +150,7 @@ fn taskKindFromString(value: []const u8) ?TaskKind {
     if (std.mem.eql(u8, value, "refactor")) return .refactor;
     if (std.mem.eql(u8, value, "terminal")) return .terminal;
     if (std.mem.eql(u8, value, "review")) return .review;
+    if (std.mem.eql(u8, value, "frontend")) return .frontend;
     if (std.mem.eql(u8, value, "broad")) return .broad;
     return null;
 }

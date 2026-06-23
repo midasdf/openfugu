@@ -840,7 +840,7 @@ fn fastRouterHint(
 fn fastRouterPrompt(allocator: std.mem.Allocator, task_text: []const u8) ![]u8 {
     return std.fmt.allocPrint(
         allocator,
-        "Route this coding task. Return only JSON with task_kind and preferred_agent. task_kind must be one of general, bugfix, test_fix, refactor, terminal, review, broad. preferred_agent must be one of claude, codex, agy. Task: {s}",
+        "Route this coding task. Return only JSON with task_kind and preferred_agent. task_kind must be one of general, bugfix, test_fix, refactor, terminal, review, frontend, broad. preferred_agent must be one of claude, codex, agy. Task: {s}",
         .{task_text},
     );
 }
