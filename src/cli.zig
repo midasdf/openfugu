@@ -223,6 +223,7 @@ pub const InteractiveInput = union(enum) {
     no_apply,
     apply,
     rerun,
+    fetch,
     pull,
     push,
     save: []const u8,
@@ -280,6 +281,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":no-apply")) return .no_apply;
     if (std.mem.eql(u8, task, ":apply")) return .apply;
     if (std.mem.eql(u8, task, ":rerun")) return .rerun;
+    if (std.mem.eql(u8, task, ":fetch")) return .fetch;
     if (std.mem.eql(u8, task, ":pull")) return .pull;
     if (std.mem.eql(u8, task, ":push")) return .push;
     if (commandValue(task, ":save")) |value| return .{ .save = value };
