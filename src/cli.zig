@@ -260,6 +260,7 @@ pub const InteractiveInput = union(enum) {
     agent: []const u8,
     mode: []const u8,
     planner: []const u8,
+    unknown_command,
     task: []const u8,
 };
 
@@ -337,6 +338,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (commandValue(task, ":agent")) |value| return .{ .agent = value };
     if (commandValue(task, ":mode")) |value| return .{ .mode = value };
     if (commandValue(task, ":planner")) |value| return .{ .planner = value };
+    if (std.mem.startsWith(u8, task, ":")) return .unknown_command;
     return .{ .task = task };
 }
 

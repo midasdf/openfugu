@@ -434,6 +434,10 @@ fn repl(init: std.process.Init) !u8 {
                 try replaceLog(init.gpa, &last_output, "planner updated\n");
                 try writer.interface.writeAll(last_output);
             },
+            .unknown_command => {
+                try replaceLog(init.gpa, &last_output, "unknown command\n");
+                try writer.interface.writeAll(last_output);
+            },
             .task => |task| {
                 try runReplTask(init, &last_output, &history, task, dry_run, agent_filter, mode, planner);
                 try writer.interface.writeAll(last_output);
@@ -1207,6 +1211,7 @@ fn handleInteractiveLine(
             planner.* = try init.gpa.dupe(u8, value);
             try replaceLog(init.gpa, last_output, "planner updated\n");
         },
+        .unknown_command => try replaceLog(init.gpa, last_output, "unknown command\n"),
         .task => |task| {
             try startOpenfuguTask(init, task, last_output, agents, history, dry_run, agent_filter, mode, planner, term, job);
         },

@@ -364,6 +364,8 @@ test "interactive input classifies prompt lines" {
     try std.testing.expectEqualStrings("codex", openfugu.cli.interactiveInput(":agent codex\n").agent);
     try std.testing.expectEqualStrings("race", openfugu.cli.interactiveInput(":mode race\n").mode);
     try std.testing.expectEqualStrings("subscription-agent", openfugu.cli.interactiveInput(":planner subscription-agent\n").planner);
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.unknown_command, openfugu.cli.interactiveInput(":save\n"));
+    try std.testing.expectEqual(openfugu.cli.InteractiveInput.unknown_command, openfugu.cli.interactiveInput(":nope\n"));
 }
 
 test "tui render draws fullscreen frame" {
