@@ -43,6 +43,8 @@ fn repl(init: std.process.Init) !u8 {
     defer init.gpa.free(mode);
     var planner = try init.gpa.dupe(u8, "subscription-agent");
     defer init.gpa.free(planner);
+    var last_task: ?[]u8 = null;
+    defer if (last_task) |task| init.gpa.free(task);
 
     while (true) {
         const status = try std.fmt.allocPrint(init.gpa, "{s} agent={s} mode={s} planner={s}", .{
@@ -67,6 +69,8 @@ fn repl(init: std.process.Init) !u8 {
             .clear_history => {
                 try replaceLog(init.gpa, &history, "No tasks yet.\n");
                 try replaceLog(init.gpa, &last_output, "history cleared\n");
+                if (last_task) |task| init.gpa.free(task);
+                last_task = null;
                 try writer.interface.writeAll(last_output);
             },
             .history => {
@@ -308,7 +312,9 @@ fn repl(init: std.process.Init) !u8 {
                 try writer.interface.writeAll(last_output);
             },
             .rerun => {
-                try replaceLog(init.gpa, &last_output, "no previous task\n");
+                if (last_task) |task| {
+                    try runReplTask(init, &last_output, &history, task, dry_run, agent_filter, mode, planner);
+                } else try replaceLog(init.gpa, &last_output, "no previous task\n");
                 try writer.interface.writeAll(last_output);
             },
             .save => |path| {
@@ -369,6 +375,8 @@ fn repl(init: std.process.Init) !u8 {
                     continue;
                 };
                 defer init.gpa.free(text);
+                if (last_task) |old| init.gpa.free(old);
+                last_task = try init.gpa.dupe(u8, text);
                 try runReplTask(init, &last_output, &history, text, dry_run, agent_filter, mode, planner);
                 try writer.interface.writeAll(last_output);
             },
@@ -385,18 +393,22 @@ fn repl(init: std.process.Init) !u8 {
                 try writer.interface.writeAll(last_output);
             },
             .plan_last => {
-                try replaceLog(init.gpa, &last_output, "no previous task\n");
+                if (last_task) |task| try runPlanPreview(init, &last_output, task, planner) else try replaceLog(init.gpa, &last_output, "no previous task\n");
                 try writer.interface.writeAll(last_output);
             },
             .plan => |task| {
+                if (last_task) |old| init.gpa.free(old);
+                last_task = try init.gpa.dupe(u8, task);
                 try runPlanPreview(init, &last_output, task, planner);
                 try writer.interface.writeAll(last_output);
             },
             .route_last => {
-                try replaceLog(init.gpa, &last_output, "no previous task\n");
+                if (last_task) |task| try runRoutePreview(init, &last_output, task, agent_filter, mode, planner) else try replaceLog(init.gpa, &last_output, "no previous task\n");
                 try writer.interface.writeAll(last_output);
             },
             .route => |task| {
+                if (last_task) |old| init.gpa.free(old);
+                last_task = try init.gpa.dupe(u8, task);
                 try runRoutePreview(init, &last_output, task, agent_filter, mode, planner);
                 try writer.interface.writeAll(last_output);
             },
@@ -439,6 +451,8 @@ fn repl(init: std.process.Init) !u8 {
                 try writer.interface.writeAll(last_output);
             },
             .task => |task| {
+                if (last_task) |old| init.gpa.free(old);
+                last_task = try init.gpa.dupe(u8, task);
                 try runReplTask(init, &last_output, &history, task, dry_run, agent_filter, mode, planner);
                 try writer.interface.writeAll(last_output);
             },
@@ -790,6 +804,18 @@ fn rawRepl(init: std.process.Init) !u8 {
                                 continue;
                             };
                             route_task = try std.fmt.allocPrint(init.gpa, ":route {s}", .{task});
+                            try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n")));
+                            try saveInputHistory(init, &input_history);
+                        },
+                        .plan => |task| {
+                            if (last_task) |old| init.gpa.free(old);
+                            last_task = try init.gpa.dupe(u8, task);
+                            try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n")));
+                            try saveInputHistory(init, &input_history);
+                        },
+                        .route => |task| {
+                            if (last_task) |old| init.gpa.free(old);
+                            last_task = try init.gpa.dupe(u8, task);
                             try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n")));
                             try saveInputHistory(init, &input_history);
                         },
