@@ -235,6 +235,7 @@ pub const InteractiveInput = union(enum) {
     stash,
     stashes,
     stash_show,
+    stash_patch,
     stash_pop,
     save: []const u8,
     stage: []const u8,
@@ -314,6 +315,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":stash")) return .stash;
     if (std.mem.eql(u8, task, ":stashes")) return .stashes;
     if (std.mem.eql(u8, task, ":stash-show")) return .stash_show;
+    if (std.mem.eql(u8, task, ":stash-patch")) return .stash_patch;
     if (std.mem.eql(u8, task, ":stash-pop")) return .stash_pop;
     if (commandValue(task, ":save")) |value| return .{ .save = value };
     if (commandValue(task, ":stage")) |value| return .{ .stage = value };
