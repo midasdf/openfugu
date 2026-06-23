@@ -242,6 +242,7 @@ pub const InteractiveInput = union(enum) {
     stage: []const u8,
     unstage: []const u8,
     commit: []const u8,
+    commit_amend: []const u8,
     switch_branch: []const u8,
     new_branch: []const u8,
     show: []const u8,
@@ -322,6 +323,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (commandValue(task, ":save")) |value| return .{ .save = value };
     if (commandValue(task, ":stage")) |value| return .{ .stage = value };
     if (commandValue(task, ":unstage")) |value| return .{ .unstage = value };
+    if (commandValue(task, ":commit-amend")) |value| return .{ .commit_amend = value };
     if (commandValue(task, ":commit")) |value| return .{ .commit = value };
     if (commandValue(task, ":switch")) |value| return .{ .switch_branch = value };
     if (commandValue(task, ":new-branch")) |value| return .{ .new_branch = value };
