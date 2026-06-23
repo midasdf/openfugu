@@ -1313,7 +1313,9 @@ fn startOpenfuguTask(
     }
     try args.append(task);
     job.* = try startTaskJob(init.gpa, init.io, args.items, task, true);
-    try replaceLog(init.gpa, last_output, "task running\n");
+    const text = try std.fmt.allocPrint(init.gpa, "task running agent={s} mode={s} planner={s}\n", .{ agent_filter.* orelse "auto", mode.*, planner.* });
+    defer init.gpa.free(text);
+    try replaceLog(init.gpa, last_output, text);
 }
 
 fn startTaskJob(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8, label: []const u8, replace_with_self: bool) !*TaskJob {
