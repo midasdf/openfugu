@@ -120,6 +120,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :fetch   fetch remotes
                     \\  :pull    pull current branch
                     \\  :push    push current branch
+                    \\  :push-force-with-lease force push with lease
                     \\  :stash   stash tracked and untracked changes
                     \\  :stashes list git stashes
                     \\  :stash-show show latest stash stat
@@ -288,6 +289,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .push => {
                 try runGitPush(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .push_force_with_lease => {
+                try runGitPushForceWithLease(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .stash => {
@@ -671,6 +676,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":fetch",
         ":pull",
         ":push",
+        ":push-force-with-lease",
         ":stash",
         ":stashes",
         ":stash-show",
@@ -1136,6 +1142,7 @@ fn handleInteractiveLine(
             \\  :fetch   fetch remotes
             \\  :pull    pull current branch
             \\  :push    push current branch
+            \\  :push-force-with-lease force push with lease
             \\  :stash   stash tracked and untracked changes
             \\  :stashes list git stashes
             \\  :stash-show show latest stash stat
@@ -1213,6 +1220,7 @@ fn handleInteractiveLine(
         .fetch => try runGitFetch(init, last_output),
         .pull => try runGitPull(init, last_output),
         .push => try runGitPush(init, last_output),
+        .push_force_with_lease => try runGitPushForceWithLease(init, last_output),
         .stash => try runGitStash(init, last_output),
         .stashes => try runGitStashes(init, last_output),
         .stash_show => try runGitStashShow(init, last_output),
@@ -1609,6 +1617,10 @@ fn runGitPull(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitPush(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":push", &.{ "git", "push" }, "pushed\n");
+}
+
+fn runGitPushForceWithLease(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":push-force-with-lease", &.{ "git", "push", "--force-with-lease" }, "pushed\n");
 }
 
 fn runGitStash(init: std.process.Init, log: *[]u8) !void {

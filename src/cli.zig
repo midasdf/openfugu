@@ -233,6 +233,7 @@ pub const InteractiveInput = union(enum) {
     fetch,
     pull,
     push,
+    push_force_with_lease,
     stash,
     stashes,
     stash_show,
@@ -316,6 +317,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":fetch")) return .fetch;
     if (std.mem.eql(u8, task, ":pull")) return .pull;
     if (std.mem.eql(u8, task, ":push")) return .push;
+    if (std.mem.eql(u8, task, ":push-force-with-lease")) return .push_force_with_lease;
     if (std.mem.eql(u8, task, ":stash")) return .stash;
     if (std.mem.eql(u8, task, ":stashes")) return .stashes;
     if (std.mem.eql(u8, task, ":stash-show")) return .stash_show;
