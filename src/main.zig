@@ -101,6 +101,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :pr      show GitHub pull request status
                     \\  :issues  show GitHub issues
                     \\  :issue   show GitHub issue detail
+                    \\  :pr N    show GitHub pull request detail
                     \\  :verify  run local verification
                     \\  :build   run build
                     \\  :test    run tests
@@ -222,6 +223,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .issue => |id| {
                 try runIssue(init, &last_output, id);
+                try writer.interface.writeAll(last_output);
+            },
+            .pr_view => |id| {
+                try runPrView(init, &last_output, id);
                 try writer.interface.writeAll(last_output);
             },
             .verify => {
@@ -555,6 +560,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":ci",
         ":watch-ci",
         ":pr",
+        ":pr ",
         ":issues",
         ":issue ",
         ":verify",
@@ -962,6 +968,7 @@ fn handleInteractiveLine(
             \\  :pr      show GitHub pull request status
             \\  :issues  show GitHub issues
             \\  :issue   show GitHub issue detail
+            \\  :pr N    show GitHub pull request detail
             \\  :verify  run local verification
             \\  :build   run build
             \\  :test    run tests
@@ -1028,6 +1035,7 @@ fn handleInteractiveLine(
         .pr => try runPrStatus(init, last_output),
         .issues => try runIssues(init, last_output),
         .issue => |id| try runIssue(init, last_output, id),
+        .pr_view => |id| try runPrView(init, last_output, id),
         .verify => try runLocalVerify(init, last_output),
         .build => try runLocalBuild(init, last_output),
         .test_ => try runLocalTests(init, last_output),
@@ -1444,6 +1452,10 @@ fn runWatchCi(init: std.process.Init, log: *[]u8) !void {
 
 fn runPrStatus(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":pr", &.{ "gh", "pr", "status" }, "no pull requests\n");
+}
+
+fn runPrView(init: std.process.Init, log: *[]u8, id: []const u8) !void {
+    try runGitCommand(init, log, ":pr", &.{ "gh", "pr", "view", id }, "no pull request\n");
 }
 
 fn runIssues(init: std.process.Init, log: *[]u8) !void {
