@@ -273,6 +273,7 @@ test "help prints cli usage" {
     try std.testing.expect(std.mem.indexOf(u8, help, "Usage: openfugu") != null);
     try std.testing.expect(std.mem.indexOf(u8, help, "openfugu doctor") != null);
     try std.testing.expect(std.mem.indexOf(u8, help, "--no-apply") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help, "claude-code") != null);
 }
 
 test "numbered file view prefixes lines" {

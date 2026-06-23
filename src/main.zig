@@ -668,6 +668,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":agent auto",
         ":agent claude",
         ":agent claudecode",
+        ":agent claude-code",
         ":agent codex",
         ":agent agy",
         ":agent antigravity",

@@ -410,6 +410,7 @@ fn helpText(allocator: std.mem.Allocator) ![]u8 {
         \\  --explain-routing   print router score and selected agent
         \\  --route-only        print router score without executing an agent
         \\  --agents <name>     restrict execution to one agent
+        \\                       aliases: claude, claudecode, claude-code, codex, agy, antigravity
         \\  --planner <name>    heuristic or subscription-agent
         \\
     );
