@@ -99,6 +99,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :ci      show recent GitHub Actions runs
                     \\  :watch-ci watch latest GitHub Actions run
                     \\  :pr      show GitHub pull request status
+                    \\  :issues  show GitHub issues
                     \\  :verify  run local verification
                     \\  :build   run build
                     \\  :test    run tests
@@ -212,6 +213,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .pr => {
                 try runPrStatus(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .issues => {
+                try runIssues(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .verify => {
@@ -545,6 +550,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":ci",
         ":watch-ci",
         ":pr",
+        ":issues",
         ":verify",
         ":build",
         ":test",
@@ -948,6 +954,7 @@ fn handleInteractiveLine(
             \\  :ci      show recent GitHub Actions runs
             \\  :watch-ci watch latest GitHub Actions run
             \\  :pr      show GitHub pull request status
+            \\  :issues  show GitHub issues
             \\  :verify  run local verification
             \\  :build   run build
             \\  :test    run tests
@@ -1012,6 +1019,7 @@ fn handleInteractiveLine(
         .ci => try runCi(init, last_output),
         .watch_ci => try runWatchCi(init, last_output),
         .pr => try runPrStatus(init, last_output),
+        .issues => try runIssues(init, last_output),
         .verify => try runLocalVerify(init, last_output),
         .build => try runLocalBuild(init, last_output),
         .test_ => try runLocalTests(init, last_output),
@@ -1428,6 +1436,10 @@ fn runWatchCi(init: std.process.Init, log: *[]u8) !void {
 
 fn runPrStatus(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":pr", &.{ "gh", "pr", "status" }, "no pull requests\n");
+}
+
+fn runIssues(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":issues", &.{ "gh", "issue", "list", "--limit", "20" }, "no issues\n");
 }
 
 fn runRg(init: std.process.Init, log: *[]u8, pattern: []const u8) !void {
