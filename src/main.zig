@@ -119,6 +119,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :cwd     change working directory
                     \\  :load    run task text from file
                     \\  :open    show file in output pane
+                    \\  :head    show first 80 file lines
                     \\  :tail    show last 80 file lines
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
@@ -315,6 +316,10 @@ fn repl(init: std.process.Init) !u8 {
                 try showFile(init, &last_output, path);
                 try writer.interface.writeAll(last_output);
             },
+            .head => |path| {
+                try headFile(init, &last_output, path);
+                try writer.interface.writeAll(last_output);
+            },
             .tail => |path| {
                 try tailFile(init, &last_output, path);
                 try writer.interface.writeAll(last_output);
@@ -449,6 +454,25 @@ fn showFile(init: std.process.Init, log: *[]u8, path: []const u8) !void {
     try appendLog(init.gpa, log, spec.path, numbered);
 }
 
+fn headFile(init: std.process.Init, log: *[]u8, path: []const u8) !void {
+    var result = openfugu.runner.run(init.gpa, init.io, .{
+        .executable = "head",
+        .argv = &.{ "head", "-n", "80", "--", path },
+        .cwd = ".",
+        .stdout_tail_bytes = 16 * 1024,
+        .stderr_tail_bytes = 2048,
+        .timeout_ms = 5000,
+    }) catch |err| {
+        const text = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+        defer init.gpa.free(text);
+        try appendLog(init.gpa, log, path, text);
+        return;
+    };
+    defer result.deinit(init.gpa);
+    const text = if (result.exit_code == 0) result.stdout_tail else if (result.stderr_tail.len != 0) result.stderr_tail else result.stdout_tail;
+    try appendLog(init.gpa, log, path, if (text.len == 0) "empty\n" else text);
+}
+
 fn tailFile(init: std.process.Init, log: *[]u8, path: []const u8) !void {
     var result = openfugu.runner.run(init.gpa, init.io, .{
         .executable = "tail",
@@ -523,6 +547,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":cwd ",
         ":load ",
         ":open ",
+        ":head ",
         ":tail ",
         ":dry-run",
         ":no-apply",
@@ -919,6 +944,7 @@ fn handleInteractiveLine(
             \\  :cwd     change working directory
             \\  :load    run task text from file
             \\  :open    show file in output pane
+            \\  :head    show first 80 file lines
             \\  :tail    show last 80 file lines
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
@@ -1020,6 +1046,7 @@ fn handleInteractiveLine(
             try startOpenfuguTask(init, text, last_output, agents, history, dry_run, agent_filter, mode, planner, term, job);
         },
         .open => |path| try showFile(init, last_output, path),
+        .head => |path| try headFile(init, last_output, path),
         .tail => |path| try tailFile(init, last_output, path),
         .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),

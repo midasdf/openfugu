@@ -238,6 +238,7 @@ pub const InteractiveInput = union(enum) {
     cwd: []const u8,
     load: []const u8,
     open: []const u8,
+    head: []const u8,
     tail: []const u8,
     plan: []const u8,
     route: []const u8,
@@ -300,6 +301,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (commandValue(task, ":cwd")) |value| return .{ .cwd = value };
     if (commandValue(task, ":load")) |value| return .{ .load = value };
     if (commandValue(task, ":open")) |value| return .{ .open = value };
+    if (commandValue(task, ":head")) |value| return .{ .head = value };
     if (commandValue(task, ":tail")) |value| return .{ .tail = value };
     if (commandValue(task, ":plan")) |value| return .{ .plan = value };
     if (commandValue(task, ":route")) |value| return .{ .route = value };
