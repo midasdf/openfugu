@@ -221,6 +221,7 @@ pub const InteractiveInput = union(enum) {
     no_apply,
     apply,
     rerun,
+    push,
     save: []const u8,
     stage: []const u8,
     unstage: []const u8,
@@ -274,6 +275,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":no-apply")) return .no_apply;
     if (std.mem.eql(u8, task, ":apply")) return .apply;
     if (std.mem.eql(u8, task, ":rerun")) return .rerun;
+    if (std.mem.eql(u8, task, ":push")) return .push;
     if (commandValue(task, ":save")) |value| return .{ .save = value };
     if (commandValue(task, ":stage")) |value| return .{ .stage = value };
     if (commandValue(task, ":unstage")) |value| return .{ .unstage = value };
