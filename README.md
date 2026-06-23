@@ -90,7 +90,7 @@ input history, press PageUp/PageDown to page output, use Home/End to jump to
 the output top or bottom, or type `:quit` to exit.
 Input history is stored in `.openfugu/tui-history`.
 The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:ledger`,
-`:where`, `:pwd`, `:worktrees`, `:git`, `:branch`, `:log`, `:diff`, `:staged`, `:patch`, `:ci`, `:watch-ci`, `:verify`, `:build`, `:test`, `:fmt`, `:check`, `:fetch`, `:pull`, `:push`, `:cancel`,
+`:where`, `:pwd`, `:worktrees`, `:git`, `:changed`, `:branch`, `:log`, `:diff`, `:staged`, `:patch`, `:ci`, `:watch-ci`, `:verify`, `:build`, `:test`, `:fmt`, `:check`, `:fetch`, `:pull`, `:push`, `:cancel`,
 `:rerun`, `:save <file>`, `:stage <path>`, `:unstage <path>`, `:commit <message>`, `:run <command>`, `:rg <pattern>`, `:todo`, `:ls [path]`, `:files [path]`,
 `:cd <path>`, `:cwd <path>`, `:load <file>`,
 `:open <file[:line]>` with line numbers, `:head <file>`, `:tail <file>`, `:dry-run`, `:no-apply`, `:apply`,

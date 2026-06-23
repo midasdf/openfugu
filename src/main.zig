@@ -89,6 +89,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :pwd     show cwd and git branch
                     \\  :worktrees show git worktrees
                     \\  :git     show git status
+                    \\  :changed show changed file names
                     \\  :branch  show current git branch
                     \\  :log     show recent commits
                     \\  :diff    show git diff stat
@@ -168,6 +169,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .git => {
                 try runGitStatus(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .changed => {
+                try runGitChanged(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .branch => {
@@ -515,6 +520,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":pwd",
         ":worktrees",
         ":git",
+        ":changed",
         ":branch",
         ":log",
         ":diff",
@@ -914,6 +920,7 @@ fn handleInteractiveLine(
             \\  :pwd     show cwd and git branch
             \\  :worktrees show git worktrees
             \\  :git     show git status
+            \\  :changed show changed file names
             \\  :branch  show current git branch
             \\  :log     show recent commits
             \\  :diff    show git diff stat
@@ -974,6 +981,7 @@ fn handleInteractiveLine(
         .where_ => try runWhere(init, last_output),
         .worktrees => try runGitWorktrees(init, last_output),
         .git => try runGitStatus(init, last_output),
+        .changed => try runGitChanged(init, last_output),
         .branch => try runGitBranch(init, last_output),
         .log => try runGitLog(init, last_output),
         .diff => try runGitDiff(init, last_output),
@@ -1313,6 +1321,10 @@ fn runGitStatus(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitWorktrees(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":worktrees", &.{ "git", "worktree", "list", "--porcelain" }, "no worktrees\n");
+}
+
+fn runGitChanged(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":changed", &.{ "git", "diff", "--name-only", "HEAD" }, "no changed files\n");
 }
 
 fn runGitBranch(init: std.process.Init, log: *[]u8) !void {
