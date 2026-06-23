@@ -102,6 +102,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :issues  show GitHub issues
                     \\  :issue   show GitHub issue detail
                     \\  :pr N    show GitHub pull request detail
+                    \\  :pr-checkout checkout GitHub pull request
                     \\  :verify  run local verification
                     \\  :build   run build
                     \\  :test    run tests
@@ -227,6 +228,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .pr_view => |id| {
                 try runPrView(init, &last_output, id);
+                try writer.interface.writeAll(last_output);
+            },
+            .pr_checkout => |id| {
+                try runPrCheckout(init, &last_output, id);
                 try writer.interface.writeAll(last_output);
             },
             .verify => {
@@ -561,6 +566,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":watch-ci",
         ":pr",
         ":pr ",
+        ":pr-checkout ",
         ":issues",
         ":issue ",
         ":verify",
@@ -969,6 +975,7 @@ fn handleInteractiveLine(
             \\  :issues  show GitHub issues
             \\  :issue   show GitHub issue detail
             \\  :pr N    show GitHub pull request detail
+            \\  :pr-checkout checkout GitHub pull request
             \\  :verify  run local verification
             \\  :build   run build
             \\  :test    run tests
@@ -1036,6 +1043,7 @@ fn handleInteractiveLine(
         .issues => try runIssues(init, last_output),
         .issue => |id| try runIssue(init, last_output, id),
         .pr_view => |id| try runPrView(init, last_output, id),
+        .pr_checkout => |id| try runPrCheckout(init, last_output, id),
         .verify => try runLocalVerify(init, last_output),
         .build => try runLocalBuild(init, last_output),
         .test_ => try runLocalTests(init, last_output),
@@ -1456,6 +1464,10 @@ fn runPrStatus(init: std.process.Init, log: *[]u8) !void {
 
 fn runPrView(init: std.process.Init, log: *[]u8, id: []const u8) !void {
     try runGitCommand(init, log, ":pr", &.{ "gh", "pr", "view", id }, "no pull request\n");
+}
+
+fn runPrCheckout(init: std.process.Init, log: *[]u8, id: []const u8) !void {
+    try runGitCommand(init, log, ":pr-checkout", &.{ "gh", "pr", "checkout", id }, "checked out\n");
 }
 
 fn runIssues(init: std.process.Init, log: *[]u8) !void {
