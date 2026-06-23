@@ -41,7 +41,7 @@ fn repl(init: std.process.Init) !u8 {
     defer if (agent_filter) |value| init.gpa.free(value);
     var mode = try init.gpa.dupe(u8, "auto");
     defer init.gpa.free(mode);
-    var planner = try init.gpa.dupe(u8, "heuristic");
+    var planner = try init.gpa.dupe(u8, "subscription-agent");
     defer init.gpa.free(planner);
 
     while (true) {
@@ -660,7 +660,7 @@ fn rawRepl(init: std.process.Init) !u8 {
     defer if (agent_filter) |value| init.gpa.free(value);
     var mode = try init.gpa.dupe(u8, "auto");
     defer init.gpa.free(mode);
-    var planner = try init.gpa.dupe(u8, "heuristic");
+    var planner = try init.gpa.dupe(u8, "subscription-agent");
     defer init.gpa.free(planner);
     // ponytail: one foreground task; add a queue if parallel TUI work matters.
     var job: ?*TaskJob = null;
@@ -946,7 +946,7 @@ fn resetRouting(
     allocator.free(mode.*);
     mode.* = try allocator.dupe(u8, "auto");
     allocator.free(planner.*);
-    planner.* = try allocator.dupe(u8, "heuristic");
+    planner.* = try allocator.dupe(u8, "subscription-agent");
 }
 
 fn handleInteractiveLine(

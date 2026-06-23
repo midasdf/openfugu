@@ -32,6 +32,14 @@ test "plan accepts explicit subscription planner flag and reports fallback" {
     try std.testing.expect(std.mem.indexOf(u8, plan, "topology=one_shot") != null);
 }
 
+test "plan defaults to subscription planner" {
+    const plan = try openfugu.cli.runAlloc(std.testing.allocator, &.{ "openfugu", "plan", "fix typo" });
+    defer std.testing.allocator.free(plan);
+
+    try std.testing.expect(std.mem.indexOf(u8, plan, "planner=subscription-agent") != null);
+    try std.testing.expect(std.mem.indexOf(u8, plan, "fallback=heuristic") != null);
+}
+
 test "ledger omits content and redacts secret values by default" {
     const event = openfugu.ledger.Event{
         .run_id = "r1",

@@ -60,12 +60,12 @@ zig build smoke -Dreal-cli-tests=true -Dreal-cli-task-tests=true
 
 The normal test suite uses fake agents and temporary git repositories only.
 
-Task execution uses local scoring by default. Passing `--planner
-subscription-agent` asks a subscription CLI to route the task first, then falls
-back to local scoring if the router output is invalid. Add
-`--explain-routing` to print the route, preferred agent, score, and selected
-agent. Local scoring also uses prior accepted/failed outcomes from the local
-ledger.
+Task execution uses the subscription-agent planner by default. It asks an
+available subscription CLI to route the task first, then falls back to local
+scoring if the router output is invalid. Pass `--planner heuristic` to skip the
+subscription router. Add `--explain-routing` to print the route, preferred
+agent, score, and selected agent. Local scoring also uses prior accepted/failed
+outcomes from the local ledger.
 
 ## Usage
 
@@ -89,6 +89,9 @@ route and execute it, press Tab to accept command suggestions, use Up/Down for
 input history, press PageUp/PageDown to page output, use Home/End to jump to
 the output top or bottom, or type `:quit` to exit.
 Input history is stored in `.openfugu/tui-history`.
+The TUI starts in `agent=auto`, `mode=auto`, `planner=subscription-agent`; use
+`:planner heuristic` only when you want local scoring without the subscription
+router.
 The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:ledger`,
 `:where`, `:pwd`, `:worktrees`, `:git`, `:changed`, `:remote`, `:branch`, `:branches`, `:log`, `:diff`, `:staged`, `:patch`, `:ci`, `:watch-ci`, `:pr`, `:pr <number-or-url>`, `:pr-checkout <number-or-url>`, `:issues`, `:issue <number-or-url>`, `:verify`, `:build`, `:test`, `:fmt`, `:check`, `:fetch`, `:pull`, `:push`, `:stash`, `:cancel`,
 `:rerun`, `:save <file>`, `:stage <path>`, `:unstage <path>`, `:commit <message>`, `:switch <branch>`, `:new-branch <branch>`, `:show <rev>`, `:run <command>`, `:rg <pattern>`, `:todo`, `:ls [path]`, `:files [path]`,

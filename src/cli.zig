@@ -473,7 +473,7 @@ fn parsePlanArgs(args: []const []const u8) !PlanArgs {
         if (!validPlanner(args[3])) return error.InvalidArgs;
         return .{ .backend = args[3], .request = args[4] };
     }
-    return .{ .backend = "heuristic", .request = args[2] };
+    return .{ .backend = "subscription-agent", .request = args[2] };
 }
 
 fn defaultAgentReports() []const probe.AgentReport {
@@ -601,13 +601,12 @@ fn runFirstRunnableSpec(
         candidate_count += 1;
     }
     defer freeRoutingCandidates(allocator, candidates[0..candidate_count]);
-    if (planner_backend) |backend| {
-        if (std.mem.eql(u8, backend, "subscription-agent")) {
-            if (try fastRouterHint(allocator, io, repo_path, task_text, candidates[0..candidate_count])) |hint| {
-                if (hint.kind) |router_kind| kind = router_kind;
-                preferred_agent = hint.preferred_agent;
-                router_name = "subscription-agent";
-            }
+    const effective_planner = planner_backend orelse "subscription-agent";
+    if (std.mem.eql(u8, effective_planner, "subscription-agent")) {
+        if (try fastRouterHint(allocator, io, repo_path, task_text, candidates[0..candidate_count])) |hint| {
+            if (hint.kind) |router_kind| kind = router_kind;
+            preferred_agent = hint.preferred_agent;
+            router_name = "subscription-agent";
         }
     }
     for (candidates[0..candidate_count]) |*candidate| {
