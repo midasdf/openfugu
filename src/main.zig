@@ -90,6 +90,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :worktrees show git worktrees
                     \\  :git     show git status
                     \\  :changed show changed file names
+                    \\  :remote  show git remotes
                     \\  :branch  show current git branch
                     \\  :log     show recent commits
                     \\  :diff    show git diff stat
@@ -173,6 +174,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .changed => {
                 try runGitChanged(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .remote => {
+                try runGitRemote(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .branch => {
@@ -521,6 +526,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":worktrees",
         ":git",
         ":changed",
+        ":remote",
         ":branch",
         ":log",
         ":diff",
@@ -921,6 +927,7 @@ fn handleInteractiveLine(
             \\  :worktrees show git worktrees
             \\  :git     show git status
             \\  :changed show changed file names
+            \\  :remote  show git remotes
             \\  :branch  show current git branch
             \\  :log     show recent commits
             \\  :diff    show git diff stat
@@ -982,6 +989,7 @@ fn handleInteractiveLine(
         .worktrees => try runGitWorktrees(init, last_output),
         .git => try runGitStatus(init, last_output),
         .changed => try runGitChanged(init, last_output),
+        .remote => try runGitRemote(init, last_output),
         .branch => try runGitBranch(init, last_output),
         .log => try runGitLog(init, last_output),
         .diff => try runGitDiff(init, last_output),
@@ -1325,6 +1333,10 @@ fn runGitWorktrees(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitChanged(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":changed", &.{ "git", "diff", "--name-only", "HEAD" }, "no changed files\n");
+}
+
+fn runGitRemote(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":remote", &.{ "git", "remote", "-v" }, "no remotes\n");
 }
 
 fn runGitBranch(init: std.process.Init, log: *[]u8) !void {
