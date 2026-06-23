@@ -114,6 +114,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :fetch   fetch remotes
                     \\  :pull    pull current branch
                     \\  :push    push current branch
+                    \\  :stash   stash tracked and untracked changes
                     \\  :save    save current output to file
                     \\  :stage   stage file or path
                     \\  :unstage unstage file or path
@@ -271,6 +272,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .push => {
                 try runGitPush(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .stash => {
+                try runGitStash(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .cancel => {
@@ -595,6 +600,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":fetch",
         ":pull",
         ":push",
+        ":stash",
         ":save ",
         ":stage ",
         ":unstage ",
@@ -1005,6 +1011,7 @@ fn handleInteractiveLine(
             \\  :fetch   fetch remotes
             \\  :pull    pull current branch
             \\  :push    push current branch
+            \\  :stash   stash tracked and untracked changes
             \\  :save    save current output to file
             \\  :stage   stage file or path
             \\  :unstage unstage file or path
@@ -1074,6 +1081,7 @@ fn handleInteractiveLine(
         .fetch => try runGitFetch(init, last_output),
         .pull => try runGitPull(init, last_output),
         .push => try runGitPush(init, last_output),
+        .stash => try runGitStash(init, last_output),
         .cancel => {
             if (job.*) |running_job| {
                 running_job.cancel_requested.store(true, .release);
@@ -1453,6 +1461,10 @@ fn runGitPull(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitPush(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":push", &.{ "git", "push" }, "pushed\n");
+}
+
+fn runGitStash(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":stash", &.{ "git", "stash", "push", "-u" }, "no changes to stash\n");
 }
 
 fn runGitCommit(init: std.process.Init, log: *[]u8, message: []const u8) !void {

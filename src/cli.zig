@@ -231,6 +231,7 @@ pub const InteractiveInput = union(enum) {
     fetch,
     pull,
     push,
+    stash,
     save: []const u8,
     stage: []const u8,
     unstage: []const u8,
@@ -302,6 +303,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":fetch")) return .fetch;
     if (std.mem.eql(u8, task, ":pull")) return .pull;
     if (std.mem.eql(u8, task, ":push")) return .push;
+    if (std.mem.eql(u8, task, ":stash")) return .stash;
     if (commandValue(task, ":save")) |value| return .{ .save = value };
     if (commandValue(task, ":stage")) |value| return .{ .stage = value };
     if (commandValue(task, ":unstage")) |value| return .{ .unstage = value };
