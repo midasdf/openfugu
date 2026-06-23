@@ -114,6 +114,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :fmt     format Zig files
                     \\  :check   run build, tests, and fmt check
                     \\  :cancel  cancel running task
+                    \\  :last    show last task
                     \\  :rerun   rerun last task
                     \\  :fetch   fetch remotes
                     \\  :pull    pull current branch
@@ -309,6 +310,13 @@ fn repl(init: std.process.Init) !u8 {
             .apply => {
                 dry_run = false;
                 try replaceLog(init.gpa, &last_output, "apply=true\n");
+                try writer.interface.writeAll(last_output);
+            },
+            .last => {
+                if (last_task) |task| {
+                    init.gpa.free(last_output);
+                    last_output = try std.fmt.allocPrint(init.gpa, "last task: {s}\n", .{task});
+                } else try replaceLog(init.gpa, &last_output, "no previous task\n");
                 try writer.interface.writeAll(last_output);
             },
             .rerun => {
@@ -781,6 +789,15 @@ fn rawRepl(init: std.process.Init) !u8 {
                             if (last_task) |task| init.gpa.free(task);
                             last_task = null;
                         },
+                        .last => {
+                            if (last_task) |task| {
+                                init.gpa.free(last_output);
+                                last_output = try std.fmt.allocPrint(init.gpa, "last task: {s}\n", .{task});
+                            } else try replaceLog(init.gpa, &last_output, "no previous task\n");
+                            try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n")));
+                            try saveInputHistory(init, &input_history);
+                            continue;
+                        },
                         .rerun => {
                             rerun_task = last_task orelse {
                                 try replaceLog(init.gpa, &last_output, "no previous task\n");
@@ -1068,6 +1085,7 @@ fn handleInteractiveLine(
             \\  :fmt     format Zig files
             \\  :check   run build, tests, and fmt check
             \\  :cancel  cancel running task
+            \\  :last    show last task
             \\  :rerun   rerun last task
             \\  :fetch   fetch remotes
             \\  :pull    pull current branch
@@ -1169,6 +1187,7 @@ fn handleInteractiveLine(
             dry_run.* = false;
             try replaceLog(init.gpa, last_output, "apply=true\n");
         },
+        .last => try replaceLog(init.gpa, last_output, "no previous task\n"),
         .rerun => try replaceLog(init.gpa, last_output, "no previous task\n"),
         .save => |path| try saveOutput(init, last_output, path),
         .stage => |path| try runGitStage(init, last_output, path),

@@ -227,6 +227,7 @@ pub const InteractiveInput = union(enum) {
     dry_run,
     no_apply,
     apply,
+    last,
     rerun,
     fetch,
     pull,
@@ -302,6 +303,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":dry-run")) return .dry_run;
     if (std.mem.eql(u8, task, ":no-apply")) return .no_apply;
     if (std.mem.eql(u8, task, ":apply")) return .apply;
+    if (std.mem.eql(u8, task, ":last")) return .last;
     if (std.mem.eql(u8, task, ":rerun")) return .rerun;
     if (std.mem.eql(u8, task, ":fetch")) return .fetch;
     if (std.mem.eql(u8, task, ":pull")) return .pull;
