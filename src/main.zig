@@ -32,7 +32,7 @@ fn repl(init: std.process.Init) !u8 {
 
     var last_output = try init.gpa.dupe(u8, "Type a task and press Enter.\n");
     defer init.gpa.free(last_output);
-    var agents = try init.gpa.dupe(u8, ":agents to refresh\n");
+    var agents = try initialAgentsText(init);
     defer init.gpa.free(agents);
     var history = try init.gpa.dupe(u8, "No tasks yet.\n");
     defer init.gpa.free(history);
@@ -98,6 +98,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :branch  show current git branch
                     \\  :branches show git branches
                     \\  :tags    show git tags
+                    \\  :describe show git describe
                     \\  :log     show recent commits
                     \\  :diff    show git diff stat
                     \\  :staged  show staged diff stat
@@ -214,6 +215,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .tags => {
                 try runGitTags(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .describe => {
+                try runGitDescribe(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .log => {
@@ -659,6 +664,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":branch",
         ":branches",
         ":tags",
+        ":describe",
         ":log",
         ":diff",
         ":staged",
@@ -734,7 +740,7 @@ fn rawRepl(init: std.process.Init) !u8 {
 
     var last_output = try init.gpa.dupe(u8, "Type a task and press Enter.\n");
     defer init.gpa.free(last_output);
-    var agents = try init.gpa.dupe(u8, ":agents to refresh\n");
+    var agents = try initialAgentsText(init);
     defer init.gpa.free(agents);
     var history = try init.gpa.dupe(u8, "No tasks yet.\n");
     defer init.gpa.free(history);
@@ -1126,6 +1132,7 @@ fn handleInteractiveLine(
             \\  :branch  show current git branch
             \\  :branches show git branches
             \\  :tags    show git tags
+            \\  :describe show git describe
             \\  :log     show recent commits
             \\  :diff    show git diff stat
             \\  :staged  show staged diff stat
@@ -1208,6 +1215,7 @@ fn handleInteractiveLine(
         .branch => try runGitBranch(init, last_output),
         .branches => try runGitBranches(init, last_output),
         .tags => try runGitTags(init, last_output),
+        .describe => try runGitDescribe(init, last_output),
         .log => try runGitLog(init, last_output),
         .diff => try runGitDiff(init, last_output),
         .staged => try runGitStaged(init, last_output),
@@ -1529,6 +1537,10 @@ fn runInteractiveCommand(init: std.process.Init, log: *[]u8, args: []const []con
     try appendLog(init.gpa, log, label, text);
 }
 
+fn initialAgentsText(init: std.process.Init) ![]u8 {
+    return runCommandText(init, &.{ "openfugu", "agents" }) catch try init.gpa.dupe(u8, "agent detection unavailable\n");
+}
+
 fn runLedgerTail(init: std.process.Init, log: *[]u8) !void {
     const text = std.Io.Dir.cwd().readFileAlloc(init.io, ".openfugu/ledger.jsonl", init.gpa, .limited(64 * 1024)) catch {
         try appendLog(init.gpa, log, ":ledger", "no ledger\n");
@@ -1589,6 +1601,10 @@ fn runGitBranches(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitTags(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":tags", &.{ "git", "tag", "--list", "--sort=-creatordate" }, "no tags\n");
+}
+
+fn runGitDescribe(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":describe", &.{ "git", "describe", "--tags", "--dirty", "--always" }, "no description\n");
 }
 
 fn runGitLog(init: std.process.Init, log: *[]u8) !void {
