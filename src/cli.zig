@@ -856,6 +856,7 @@ fn agentListed(filter: ?[]const u8, name: []const u8) bool {
     while (parts.next()) |part_raw| {
         const part = std.mem.trim(u8, part_raw, " \t\r\n");
         if (std.mem.eql(u8, part, name)) return true;
+        if (std.mem.eql(u8, part, "antigravity") and std.mem.eql(u8, name, "agy")) return true;
     }
     return false;
 }

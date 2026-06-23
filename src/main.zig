@@ -136,7 +136,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
-                    \\  :agent   set agent: auto, claude, codex, agy
+                    \\  :agent   set agent: auto, claude, codex, agy, antigravity
                     \\  :mode    set mode: auto, single, race, ensemble
                     \\  :planner set planner: heuristic, subscription-agent
                     \\  :clear   clear this session
@@ -628,6 +628,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":agent claude",
         ":agent codex",
         ":agent agy",
+        ":agent antigravity",
         ":mode auto",
         ":mode single",
         ":mode race",
@@ -1033,7 +1034,7 @@ fn handleInteractiveLine(
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
-            \\  :agent   set agent: auto, claude, codex, agy
+            \\  :agent   set agent: auto, claude, codex, agy, antigravity
             \\  :mode    set mode: auto, single, race, ensemble
             \\  :planner set planner: heuristic, subscription-agent
             \\  :clear   clear this session
@@ -1832,7 +1833,7 @@ fn envInt(env: *const std.process.Environ.Map, name: []const u8, fallback: u16) 
 }
 
 fn validAgent(value: []const u8) bool {
-    return std.mem.eql(u8, value, "auto") or std.mem.eql(u8, value, "claude") or std.mem.eql(u8, value, "codex") or std.mem.eql(u8, value, "agy");
+    return std.mem.eql(u8, value, "auto") or std.mem.eql(u8, value, "claude") or std.mem.eql(u8, value, "codex") or std.mem.eql(u8, value, "agy") or std.mem.eql(u8, value, "antigravity");
 }
 
 fn validMode(value: []const u8) bool {
