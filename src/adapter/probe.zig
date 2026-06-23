@@ -41,6 +41,7 @@ pub const DetectSpec = struct {
     version_argv: []const []const u8,
     auth_argv: []const []const u8,
     auth_success_means_subscription: bool = false,
+    auth_timeout_ms: i64 = 5000,
     task_argv: ?[]const []const u8 = null,
     router_argv: ?[]const []const u8 = null,
     supported_version: []const u8,
@@ -68,7 +69,7 @@ pub fn detect(allocator: std.mem.Allocator, io: std.Io, spec: DetectSpec) !Agent
         .cwd = ".",
         .stdout_tail_bytes = 2048,
         .stderr_tail_bytes = 2048,
-        .timeout_ms = 5000,
+        .timeout_ms = spec.auth_timeout_ms,
     });
     defer auth_result.deinit(allocator);
 

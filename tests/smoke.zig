@@ -24,7 +24,9 @@ test "real CLI smoke tests are opt-in" {
         .{
             .name = "agy",
             .version_argv = &.{ "agy", "--version" },
-            .auth_argv = &.{ "agy", "auth", "status" },
+            .auth_argv = &.{ "agy", "models" },
+            .auth_success_means_subscription = true,
+            .auth_timeout_ms = 15000,
             .supported_version = "1.0.",
             .profile = openfugu.antigravity.profileForVersion("1.0."),
             .subscription = openfugu.config.Config.default().subscription,

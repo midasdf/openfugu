@@ -537,6 +537,7 @@ fn defaultDetectSpecs() [3]probe.DetectSpec {
             .version_argv = &agy_version_argv,
             .auth_argv = &agy_auth_argv,
             .auth_success_means_subscription = true,
+            .auth_timeout_ms = 15000,
             .supported_version = "1.0.",
             .profile = antigravity.profileForVersion("1.0."),
             .subscription = subscription,
