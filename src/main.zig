@@ -630,6 +630,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":fmt",
         ":check",
         ":cancel",
+        ":last",
         ":rerun",
         ":fetch",
         ":pull",
