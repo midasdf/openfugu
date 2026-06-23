@@ -112,6 +112,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :stage   stage file or path
                     \\  :unstage unstage file or path
                     \\  :commit  commit staged changes
+                    \\  :show    show commit summary
                     \\  :run     run shell command
                     \\  :rg      search files with ripgrep
                     \\  :todo    search todo markers
@@ -287,6 +288,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .commit => |message| {
                 try runGitCommit(init, &last_output, message);
+                try writer.interface.writeAll(last_output);
+            },
+            .show => |rev| {
+                try runGitShow(init, &last_output, rev);
                 try writer.interface.writeAll(last_output);
             },
             .run => |command| {
@@ -548,6 +553,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":stage ",
         ":unstage ",
         ":commit ",
+        ":show ",
         ":run ",
         ":rg ",
         ":todo",
@@ -949,6 +955,7 @@ fn handleInteractiveLine(
             \\  :stage   stage file or path
             \\  :unstage unstage file or path
             \\  :commit  commit staged changes
+            \\  :show    show commit summary
             \\  :run     run shell command
             \\  :rg      search files with ripgrep
             \\  :todo    search todo markers
@@ -1036,6 +1043,7 @@ fn handleInteractiveLine(
         .stage => |path| try runGitStage(init, last_output, path),
         .unstage => |path| try runGitUnstage(init, last_output, path),
         .commit => |message| try runGitCommit(init, last_output, message),
+        .show => |rev| try runGitShow(init, last_output, rev),
         .run => |command| {
             if (job.* != null) {
                 try replaceLog(init.gpa, last_output, "task already running\n");
@@ -1381,6 +1389,10 @@ fn runGitPush(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitCommit(init: std.process.Init, log: *[]u8, message: []const u8) !void {
     try runGitCommand(init, log, ":commit", &.{ "git", "commit", "-m", message }, "committed\n");
+}
+
+fn runGitShow(init: std.process.Init, log: *[]u8, rev: []const u8) !void {
+    try runGitCommand(init, log, ":show", &.{ "git", "show", "--stat", "--oneline", rev }, "no commit output\n");
 }
 
 fn runCi(init: std.process.Init, log: *[]u8) !void {

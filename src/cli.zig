@@ -232,6 +232,7 @@ pub const InteractiveInput = union(enum) {
     stage: []const u8,
     unstage: []const u8,
     commit: []const u8,
+    show: []const u8,
     run: []const u8,
     rg: []const u8,
     todo,
@@ -294,6 +295,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (commandValue(task, ":stage")) |value| return .{ .stage = value };
     if (commandValue(task, ":unstage")) |value| return .{ .unstage = value };
     if (commandValue(task, ":commit")) |value| return .{ .commit = value };
+    if (commandValue(task, ":show")) |value| return .{ .show = value };
     if (commandValue(task, ":run")) |value| return .{ .run = value };
     if (commandValue(task, ":rg")) |value| return .{ .rg = value };
     if (std.mem.eql(u8, task, ":todo")) return .todo;
