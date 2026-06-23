@@ -101,6 +101,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :check   run build, tests, and fmt check
                     \\  :cancel  cancel running task
                     \\  :rerun   rerun last task
+                    \\  :pull    pull current branch
                     \\  :push    push current branch
                     \\  :save    save current output to file
                     \\  :stage   stage file or path
@@ -202,6 +203,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .check => {
                 try runLocalCheck(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .pull => {
+                try runGitPull(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .push => {
@@ -459,6 +464,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":check",
         ":cancel",
         ":rerun",
+        ":pull",
         ":push",
         ":save ",
         ":stage ",
@@ -852,6 +858,7 @@ fn handleInteractiveLine(
             \\  :check   run build, tests, and fmt check
             \\  :cancel  cancel running task
             \\  :rerun   rerun last task
+            \\  :pull    pull current branch
             \\  :push    push current branch
             \\  :save    save current output to file
             \\  :stage   stage file or path
@@ -904,6 +911,7 @@ fn handleInteractiveLine(
         .test_ => try runLocalTests(init, last_output),
         .fmt => try runLocalFmt(init, last_output),
         .check => try runLocalCheck(init, last_output),
+        .pull => try runGitPull(init, last_output),
         .push => try runGitPush(init, last_output),
         .cancel => {
             if (job.*) |running_job| {
@@ -1251,6 +1259,10 @@ fn runGitStage(init: std.process.Init, log: *[]u8, path: []const u8) !void {
 
 fn runGitUnstage(init: std.process.Init, log: *[]u8, path: []const u8) !void {
     try runGitCommand(init, log, ":unstage", &.{ "git", "reset", "-q", "--", path }, "unstaged\n");
+}
+
+fn runGitPull(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":pull", &.{ "git", "pull", "--ff-only" }, "up to date\n");
 }
 
 fn runGitPush(init: std.process.Init, log: *[]u8) !void {
