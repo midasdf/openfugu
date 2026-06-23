@@ -78,7 +78,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\Commands:
                     \\  :status  show current routing state
                     \\  :reset-routing reset routing to defaults
-                    \\  :plan    preview workflow plan
+                    \\  :plan    preview workflow plan; no arg uses last task
                     \\  :route   preview routing without running; no arg uses last task
                     \\  :replay  show ledger replay for run id
                     \\  :doctor  show agent health
@@ -382,6 +382,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .tail => |path| {
                 try tailFile(init, &last_output, path);
+                try writer.interface.writeAll(last_output);
+            },
+            .plan_last => {
+                try replaceLog(init.gpa, &last_output, "no previous task\n");
                 try writer.interface.writeAll(last_output);
             },
             .plan => |task| {
@@ -746,6 +750,8 @@ fn rawRepl(init: std.process.Init) !u8 {
                     try input.setValue("");
                     history_index = null;
                     var rerun_task: ?[]const u8 = null;
+                    var plan_task: ?[]u8 = null;
+                    defer if (plan_task) |task| init.gpa.free(task);
                     var route_task: ?[]u8 = null;
                     defer if (route_task) |task| init.gpa.free(task);
                     switch (openfugu.cli.interactiveInput(line)) {
@@ -762,6 +768,15 @@ fn rawRepl(init: std.process.Init) !u8 {
                                 try replaceLog(init.gpa, &last_output, "no previous task\n");
                                 continue;
                             };
+                            try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n")));
+                            try saveInputHistory(init, &input_history);
+                        },
+                        .plan_last => {
+                            const task = last_task orelse {
+                                try replaceLog(init.gpa, &last_output, "no previous task\n");
+                                continue;
+                            };
+                            plan_task = try std.fmt.allocPrint(init.gpa, ":plan {s}", .{task});
                             try input_history.append(try init.gpa.dupe(u8, std.mem.trim(u8, line, " \t\r\n")));
                             try saveInputHistory(init, &input_history);
                         },
@@ -793,7 +808,7 @@ fn rawRepl(init: std.process.Init) !u8 {
                             try saveInputHistory(init, &input_history);
                         },
                     }
-                    const should_quit = try handleInteractiveLine(init, route_task orelse rerun_task orelse line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
+                    const should_quit = try handleInteractiveLine(init, plan_task orelse route_task orelse rerun_task orelse line, &last_output, &agents, &history, &dry_run, &agent_filter, &mode, &planner, &term, &job);
                     output_offset = null;
                     if (should_quit) return openfugu.cli.exit_ok;
                 },
@@ -991,7 +1006,7 @@ fn handleInteractiveLine(
             \\Commands:
             \\  :status  show current routing state
             \\  :reset-routing reset routing to defaults
-            \\  :plan    preview workflow plan
+            \\  :plan    preview workflow plan; no arg uses last task
             \\  :route   preview routing without running; no arg uses last task
             \\  :replay  show ledger replay for run id
             \\  :doctor  show agent health
@@ -1160,6 +1175,7 @@ fn handleInteractiveLine(
         .open => |path| try showFile(init, last_output, path),
         .head => |path| try headFile(init, last_output, path),
         .tail => |path| try tailFile(init, last_output, path),
+        .plan_last => try replaceLog(init.gpa, last_output, "no previous task\n"),
         .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route_last => try replaceLog(init.gpa, last_output, "no previous task\n"),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),

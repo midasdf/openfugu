@@ -585,7 +585,7 @@ test "task cli uses ledger outcomes to adjust routing score" {
     var result = try openfugu.cli.runWithProbeSpecsInRepo(
         std.testing.allocator,
         std.testing.io,
-        &.{ "openfugu", "--explain-routing", "fix failing tests" },
+        &.{ "openfugu", "--planner", "heuristic", "--explain-routing", "fix failing tests" },
         &specs,
         root,
         worktrees,
