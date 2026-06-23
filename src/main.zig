@@ -119,6 +119,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :cwd     change working directory
                     \\  :load    run task text from file
                     \\  :open    show file in output pane
+                    \\  :tail    show last 80 file lines
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
@@ -314,6 +315,10 @@ fn repl(init: std.process.Init) !u8 {
                 try showFile(init, &last_output, path);
                 try writer.interface.writeAll(last_output);
             },
+            .tail => |path| {
+                try tailFile(init, &last_output, path);
+                try writer.interface.writeAll(last_output);
+            },
             .plan => |task| {
                 try runPlanPreview(init, &last_output, task, planner);
                 try writer.interface.writeAll(last_output);
@@ -444,6 +449,25 @@ fn showFile(init: std.process.Init, log: *[]u8, path: []const u8) !void {
     try appendLog(init.gpa, log, spec.path, numbered);
 }
 
+fn tailFile(init: std.process.Init, log: *[]u8, path: []const u8) !void {
+    var result = openfugu.runner.run(init.gpa, init.io, .{
+        .executable = "tail",
+        .argv = &.{ "tail", "-n", "80", "--", path },
+        .cwd = ".",
+        .stdout_tail_bytes = 16 * 1024,
+        .stderr_tail_bytes = 2048,
+        .timeout_ms = 5000,
+    }) catch |err| {
+        const text = try std.fmt.allocPrint(init.gpa, "error: {s}\n", .{@errorName(err)});
+        defer init.gpa.free(text);
+        try appendLog(init.gpa, log, path, text);
+        return;
+    };
+    defer result.deinit(init.gpa);
+    const text = if (result.exit_code == 0) result.stdout_tail else if (result.stderr_tail.len != 0) result.stderr_tail else result.stdout_tail;
+    try appendLog(init.gpa, log, path, if (text.len == 0) "empty\n" else text);
+}
+
 fn rawRepl(init: std.process.Init) !u8 {
     var env = zz.Environment.fromEnvMap(init.environ_map);
     var term = try zz.Terminal.init(init.io, &env, .{ .alt_screen = true, .hide_cursor = false, .bracketed_paste = true });
@@ -499,6 +523,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":cwd ",
         ":load ",
         ":open ",
+        ":tail ",
         ":dry-run",
         ":no-apply",
         ":apply",
@@ -894,6 +919,7 @@ fn handleInteractiveLine(
             \\  :cwd     change working directory
             \\  :load    run task text from file
             \\  :open    show file in output pane
+            \\  :tail    show last 80 file lines
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
@@ -994,6 +1020,7 @@ fn handleInteractiveLine(
             try startOpenfuguTask(init, text, last_output, agents, history, dry_run, agent_filter, mode, planner, term, job);
         },
         .open => |path| try showFile(init, last_output, path),
+        .tail => |path| try tailFile(init, last_output, path),
         .plan => |task| try runPlanPreview(init, last_output, task, planner.*),
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
         .replay => |run_id| try runReplay(init, last_output, run_id),
