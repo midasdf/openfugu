@@ -207,6 +207,7 @@ pub const InteractiveInput = union(enum) {
     remote,
     branch,
     branches,
+    tags,
     log,
     diff,
     staged,
@@ -291,6 +292,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":remote")) return .remote;
     if (std.mem.eql(u8, task, ":branch")) return .branch;
     if (std.mem.eql(u8, task, ":branches")) return .branches;
+    if (std.mem.eql(u8, task, ":tags")) return .tags;
     if (std.mem.eql(u8, task, ":log")) return .log;
     if (std.mem.eql(u8, task, ":diff")) return .diff;
     if (std.mem.eql(u8, task, ":staged")) return .staged;
