@@ -524,6 +524,46 @@ test "task cli accepts antigravity as agy agent filter" {
     try std.testing.expect(std.mem.indexOf(u8, result.text, "execute=false") != null);
 }
 
+test "task cli accepts claudecode as claude agent filter" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const cwd = try std.process.currentPathAlloc(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(cwd);
+    const root = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "repo" });
+    defer std.testing.allocator.free(root);
+    const worktrees = try std.fs.path.join(std.testing.allocator, &.{ cwd, ".zig-cache", "tmp", tmp.sub_path[0..], "worktrees" });
+    defer std.testing.allocator.free(worktrees);
+
+    try tmp.dir.createDirPath(std.testing.io, "repo");
+    try tmp.dir.createDirPath(std.testing.io, "worktrees");
+    const worker_argv = [_][]const u8{ test_options.write_file_agent_path, "should-not-run.txt", "bad\n" };
+    const specs = [_]openfugu.probe.DetectSpec{.{
+        .name = "claude",
+        .version_argv = &.{ test_options.probe_cli_path, "--version" },
+        .auth_argv = &.{ test_options.probe_cli_path, "auth" },
+        .task_argv = &worker_argv,
+        .supported_version = "supported-1",
+        .profile = openfugu.claude_code.profileForVersion("supported-1"),
+        .subscription = openfugu.config.Config.default().subscription,
+    }};
+
+    var result = try openfugu.cli.runWithProbeSpecsInRepo(
+        std.testing.allocator,
+        std.testing.io,
+        &.{ "openfugu", "--agents", "claudecode", "--route-only", "fix failing tests" },
+        &specs,
+        root,
+        worktrees,
+        &.{},
+    );
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(openfugu.cli.exit_ok, result.code);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "candidate agent=claude") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "execute=false") != null);
+}
+
 test "task cli uses ledger outcomes to adjust routing score" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

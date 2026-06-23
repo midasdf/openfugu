@@ -142,7 +142,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :dry-run toggle dry-run mode
                     \\  :no-apply enter dry-run mode
                     \\  :apply   return to apply mode
-                    \\  :agent   set agent: auto, claude, codex, agy, antigravity
+                    \\  :agent   set agent: auto, claude, claudecode, codex, agy, antigravity
                     \\  :mode    set mode: auto, single, race, ensemble
                     \\  :planner set planner: heuristic, subscription-agent
                     \\  :clear   clear this session
@@ -430,12 +430,12 @@ fn repl(init: std.process.Init) !u8 {
                 try writer.interface.writeAll(last_output);
             },
             .agent => |value| {
-                if (!validAgent(value)) {
+                const agent = canonicalAgent(value) orelse {
                     try replaceLog(init.gpa, &last_output, "invalid agent\n");
                     continue;
-                }
+                };
                 if (agent_filter) |old| init.gpa.free(old);
-                agent_filter = if (std.mem.eql(u8, value, "auto")) null else try init.gpa.dupe(u8, value);
+                agent_filter = if (std.mem.eql(u8, agent, "auto")) null else try init.gpa.dupe(u8, agent);
                 try replaceLog(init.gpa, &last_output, "agent updated\n");
                 try writer.interface.writeAll(last_output);
             },
@@ -667,6 +667,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":apply",
         ":agent auto",
         ":agent claude",
+        ":agent claudecode",
         ":agent codex",
         ":agent agy",
         ":agent antigravity",
@@ -1120,7 +1121,7 @@ fn handleInteractiveLine(
             \\  :dry-run toggle dry-run mode
             \\  :no-apply enter dry-run mode
             \\  :apply   return to apply mode
-            \\  :agent   set agent: auto, claude, codex, agy, antigravity
+            \\  :agent   set agent: auto, claude, claudecode, codex, agy, antigravity
             \\  :mode    set mode: auto, single, race, ensemble
             \\  :planner set planner: heuristic, subscription-agent
             \\  :clear   clear this session
@@ -1239,12 +1240,12 @@ fn handleInteractiveLine(
         .route => |task| try runRoutePreview(init, last_output, task, agent_filter.*, mode.*, planner.*),
         .replay => |run_id| try runReplay(init, last_output, run_id),
         .agent => |value| {
-            if (!validAgent(value)) {
+            const agent = canonicalAgent(value) orelse {
                 try replaceLog(init.gpa, last_output, "invalid agent\n");
                 return false;
-            }
+            };
             if (agent_filter.*) |old| init.gpa.free(old);
-            agent_filter.* = if (std.mem.eql(u8, value, "auto")) null else try init.gpa.dupe(u8, value);
+            agent_filter.* = if (std.mem.eql(u8, agent, "auto")) null else try init.gpa.dupe(u8, agent);
             try replaceLog(init.gpa, last_output, "agent updated\n");
         },
         .mode => |value| {
@@ -1927,8 +1928,12 @@ fn envInt(env: *const std.process.Environ.Map, name: []const u8, fallback: u16) 
     return parsed;
 }
 
-fn validAgent(value: []const u8) bool {
-    return std.mem.eql(u8, value, "auto") or std.mem.eql(u8, value, "claude") or std.mem.eql(u8, value, "codex") or std.mem.eql(u8, value, "agy") or std.mem.eql(u8, value, "antigravity");
+fn canonicalAgent(value: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, value, "auto")) return "auto";
+    if (std.mem.eql(u8, value, "claude") or std.mem.eql(u8, value, "claudecode") or std.mem.eql(u8, value, "claude-code")) return "claude";
+    if (std.mem.eql(u8, value, "codex")) return "codex";
+    if (std.mem.eql(u8, value, "agy") or std.mem.eql(u8, value, "antigravity")) return "agy";
+    return null;
 }
 
 fn validMode(value: []const u8) bool {

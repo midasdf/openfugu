@@ -100,3 +100,5 @@ The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:ledger`,
 `:agent <name>`, `:mode <name>`, `:planner <name>`, `:reset-routing`,
 `:plan [task]`, `:route [task]`, `:last`, `:replay <run-id>`, `:clear`, `:history`, and
 `:clear-history`.
+Agent names accept `claude`, `claudecode`, `claude-code`, `codex`, `agy`, and
+`antigravity`.
