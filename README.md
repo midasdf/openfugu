@@ -93,7 +93,7 @@ The TUI starts in `agent=auto`, `mode=auto`, `planner=subscription-agent`; use
 `:planner heuristic` only when you want local scoring without the subscription
 router.
 The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:ledger`,
-`:where`, `:pwd`, `:worktrees`, `:git`, `:changed`, `:remote`, `:branch`, `:branches`, `:log`, `:diff`, `:staged`, `:patch`, `:ci`, `:watch-ci`, `:pr`, `:pr <number-or-url>`, `:pr-checkout <number-or-url>`, `:issues`, `:issue <number-or-url>`, `:verify`, `:build`, `:test`, `:fmt`, `:check`, `:fetch`, `:pull`, `:push`, `:stash`, `:stashes`, `:stash-show`, `:stash-patch`, `:stash-pop`, `:cancel`,
+`:where`, `:pwd`, `:worktrees`, `:git`, `:changed`, `:remote`, `:branch`, `:branches`, `:log`, `:diff`, `:staged`, `:staged-patch`, `:patch`, `:ci`, `:watch-ci`, `:pr`, `:pr <number-or-url>`, `:pr-checkout <number-or-url>`, `:issues`, `:issue <number-or-url>`, `:verify`, `:build`, `:test`, `:fmt`, `:check`, `:fetch`, `:pull`, `:push`, `:stash`, `:stashes`, `:stash-show`, `:stash-patch`, `:stash-pop`, `:cancel`,
 `:rerun`, `:save <file>`, `:stage <path>`, `:unstage <path>`, `:commit <message>`, `:switch <branch>`, `:new-branch <branch>`, `:show <rev>`, `:run <command>`, `:rg <pattern>`, `:todo`, `:ls [path]`, `:files [path]`,
 `:cd <path>`, `:cwd <path>`, `:load <file>`,
 `:open <file[:line]>` with line numbers, `:head <file>`, `:tail <file>`, `:dry-run`, `:no-apply`, `:apply`,

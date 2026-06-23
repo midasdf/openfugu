@@ -210,6 +210,7 @@ pub const InteractiveInput = union(enum) {
     log,
     diff,
     staged,
+    staged_patch,
     patch,
     ci,
     watch_ci,
@@ -290,6 +291,7 @@ pub fn interactiveInput(input: []const u8) InteractiveInput {
     if (std.mem.eql(u8, task, ":log")) return .log;
     if (std.mem.eql(u8, task, ":diff")) return .diff;
     if (std.mem.eql(u8, task, ":staged")) return .staged;
+    if (std.mem.eql(u8, task, ":staged-patch")) return .staged_patch;
     if (std.mem.eql(u8, task, ":patch")) return .patch;
     if (std.mem.eql(u8, task, ":ci")) return .ci;
     if (std.mem.eql(u8, task, ":watch-ci")) return .watch_ci;
