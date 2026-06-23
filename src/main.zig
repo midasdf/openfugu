@@ -130,6 +130,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :unstage unstage file or path
                     \\  :commit  commit staged changes
                     \\  :commit-amend amend latest commit
+                    \\  :commit-amend-no-edit amend without changing message
                     \\  :switch  switch git branch
                     \\  :new-branch create and switch git branch
                     \\  :show    show commit summary
@@ -369,6 +370,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .commit_amend => |message| {
                 try runGitCommitAmend(init, &last_output, message);
+                try writer.interface.writeAll(last_output);
+            },
+            .commit_amend_no_edit => {
+                try runGitCommitAmendNoEdit(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .switch_branch => |branch| {
@@ -676,6 +681,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":unstage ",
         ":commit ",
         ":commit-amend ",
+        ":commit-amend-no-edit",
         ":switch ",
         ":new-branch ",
         ":show ",
@@ -1140,6 +1146,7 @@ fn handleInteractiveLine(
             \\  :unstage unstage file or path
             \\  :commit  commit staged changes
             \\  :commit-amend amend latest commit
+            \\  :commit-amend-no-edit amend without changing message
             \\  :switch  switch git branch
             \\  :new-branch create and switch git branch
             \\  :show    show commit summary
@@ -1244,6 +1251,7 @@ fn handleInteractiveLine(
         .unstage => |path| try runGitUnstage(init, last_output, path),
         .commit => |message| try runGitCommit(init, last_output, message),
         .commit_amend => |message| try runGitCommitAmend(init, last_output, message),
+        .commit_amend_no_edit => try runGitCommitAmendNoEdit(init, last_output),
         .switch_branch => |branch| try runGitSwitch(init, last_output, branch),
         .new_branch => |branch| try runGitNewBranch(init, last_output, branch),
         .show => |rev| try runGitShow(init, last_output, rev),
@@ -1629,6 +1637,10 @@ fn runGitCommit(init: std.process.Init, log: *[]u8, message: []const u8) !void {
 
 fn runGitCommitAmend(init: std.process.Init, log: *[]u8, message: []const u8) !void {
     try runGitCommand(init, log, ":commit-amend", &.{ "git", "commit", "--amend", "-m", message }, "amended\n");
+}
+
+fn runGitCommitAmendNoEdit(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":commit-amend-no-edit", &.{ "git", "commit", "--amend", "--no-edit" }, "amended\n");
 }
 
 fn runGitSwitch(init: std.process.Init, log: *[]u8, branch: []const u8) !void {

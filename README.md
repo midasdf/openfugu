@@ -94,7 +94,7 @@ The TUI starts in `agent=auto`, `mode=auto`, `planner=subscription-agent`; use
 router.
 The TUI also accepts `:status`, `:doctor`, `:agents`, `:usage`, `:ledger`,
 `:where`, `:pwd`, `:worktrees`, `:git`, `:changed`, `:remote`, `:branch`, `:branches`, `:log`, `:diff`, `:staged`, `:staged-patch`, `:patch`, `:ci`, `:watch-ci`, `:pr`, `:pr <number-or-url>`, `:pr-checkout <number-or-url>`, `:issues`, `:issue <number-or-url>`, `:verify`, `:build`, `:test`, `:fmt`, `:check`, `:fetch`, `:pull`, `:push`, `:stash`, `:stashes`, `:stash-show`, `:stash-patch`, `:stash-pop`, `:cancel`,
-`:rerun`, `:save <file>`, `:stage <path>`, `:unstage <path>`, `:commit <message>`, `:commit-amend <message>`, `:switch <branch>`, `:new-branch <branch>`, `:show <rev>`, `:run <command>`, `:rg <pattern>`, `:todo`, `:ls [path]`, `:files [path]`,
+`:rerun`, `:save <file>`, `:stage <path>`, `:unstage <path>`, `:commit <message>`, `:commit-amend <message>`, `:commit-amend-no-edit`, `:switch <branch>`, `:new-branch <branch>`, `:show <rev>`, `:run <command>`, `:rg <pattern>`, `:todo`, `:ls [path]`, `:files [path]`,
 `:cd <path>`, `:cwd <path>`, `:load <file>`,
 `:open <file[:line]>` with line numbers, `:head <file>`, `:tail <file>`, `:dry-run`, `:no-apply`, `:apply`,
 `:agent <name>`, `:mode <name>`, `:planner <name>`, `:reset-routing`,
