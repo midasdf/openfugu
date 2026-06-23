@@ -120,6 +120,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :pull    pull current branch
                     \\  :push    push current branch
                     \\  :stash   stash tracked and untracked changes
+                    \\  :stashes list git stashes
                     \\  :stash-pop pop latest stash
                     \\  :save    save current output to file
                     \\  :stage   stage file or path
@@ -282,6 +283,10 @@ fn repl(init: std.process.Init) !u8 {
             },
             .stash => {
                 try runGitStash(init, &last_output);
+                try writer.interface.writeAll(last_output);
+            },
+            .stashes => {
+                try runGitStashes(init, &last_output);
                 try writer.interface.writeAll(last_output);
             },
             .stash_pop => {
@@ -641,6 +646,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":pull",
         ":push",
         ":stash",
+        ":stashes",
         ":stash-pop",
         ":save ",
         ":stage ",
@@ -1100,6 +1106,7 @@ fn handleInteractiveLine(
             \\  :pull    pull current branch
             \\  :push    push current branch
             \\  :stash   stash tracked and untracked changes
+            \\  :stashes list git stashes
             \\  :stash-pop pop latest stash
             \\  :save    save current output to file
             \\  :stage   stage file or path
@@ -1171,6 +1178,7 @@ fn handleInteractiveLine(
         .pull => try runGitPull(init, last_output),
         .push => try runGitPush(init, last_output),
         .stash => try runGitStash(init, last_output),
+        .stashes => try runGitStashes(init, last_output),
         .stash_pop => try runGitStashPop(init, last_output),
         .cancel => {
             if (job.*) |running_job| {
@@ -1561,6 +1569,10 @@ fn runGitPush(init: std.process.Init, log: *[]u8) !void {
 
 fn runGitStash(init: std.process.Init, log: *[]u8) !void {
     try runGitCommand(init, log, ":stash", &.{ "git", "stash", "push", "-u" }, "no changes to stash\n");
+}
+
+fn runGitStashes(init: std.process.Init, log: *[]u8) !void {
+    try runGitCommand(init, log, ":stashes", &.{ "git", "stash", "list" }, "no stash entries\n");
 }
 
 fn runGitStashPop(init: std.process.Init, log: *[]u8) !void {
