@@ -121,6 +121,68 @@ pub fn runWithProbeSpecsInRepo(
         defer if (owns_text) allocator.free(text);
         return .{ .code = exit_ok, .text = try replay.renderLedgerText(allocator, args[2], text) };
     }
+    // list-agents is an alias for agents that better matches the
+    // verb-noun subcommand style used by the skill.
+    if (std.mem.eql(u8, args[1], "list-agents")) {
+        const reports = try collectReports(allocator, io, specs);
+        defer probe.freeReports(allocator, reports);
+        return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
+    }
+    if (std.mem.eql(u8, args[1], "status")) {
+        const reports = try collectReports(allocator, io, specs);
+        defer probe.freeReports(allocator, reports);
+        const ledger_path = try runLedgerPath(allocator, worktree_root);
+        defer allocator.free(ledger_path);
+        const ledger_text = std.Io.Dir.cwd().readFileAlloc(io, ledger_path, allocator, .limited(1024 * 1024)) catch "";
+        const owns_ledger = ledger_text.len != 0;
+        defer if (owns_ledger) allocator.free(ledger_text);
+        const summary = usage.summarizeLedgerText(ledger_text);
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(allocator);
+        try out.print(allocator, "agents={d} runnable={d} ledger_calls={d} successes={d} failures={d} rate_limits={d}\n", .{
+            reports.len,
+            countRunnable(reports),
+            summary.calls,
+            summary.successes,
+            summary.failures,
+            summary.rate_limits,
+        });
+        for (reports) |agent| {
+            try out.print(allocator, "  {s} compatibility={s} auth={s} runnable={}\n", .{
+                agent.name,
+                @tagName(agent.compatibility),
+                @tagName(agent.auth),
+                agent.runnable,
+            });
+        }
+        return .{ .code = exit_ok, .text = try out.toOwnedSlice(allocator) };
+    }
+    // route <task> is an explicit form of "--route-only <task>". It is
+    // the recommended entry point for coding agents that want to inspect
+    // routing before spending quota on a real run. Flags may appear
+    // before or after the task text; the first non-flag token after
+    // `route` is the task.
+    if (std.mem.eql(u8, args[1], "route")) {
+        const task = subcommandTask(args[2..]) orelse {
+            return .{
+                .code = exit_usage,
+                .text = try allocator.dupe(u8, "usage: openfugu route \"task\"\n"),
+            };
+        };
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), true);
+    }
+    // run <task> is the explicit subcommand form of the positional task.
+    // It is the recommended entry point for coding agents because it
+    // avoids any ambiguity about what is a flag and what is the task.
+    if (std.mem.eql(u8, args[1], "run")) {
+        const task = subcommandTask(args[2..]) orelse {
+            return .{
+                .code = exit_usage,
+                .text = try allocator.dupe(u8, "usage: openfugu run \"task\"\n"),
+            };
+        };
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), hasFlag(args, "--route-only"));
+    }
     if (std.mem.eql(u8, args[1], "doctor") or std.mem.eql(u8, args[1], "agents")) {
         const reports = try collectReports(allocator, io, specs);
         defer probe.freeReports(allocator, reports);
@@ -156,6 +218,11 @@ pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
         if (std.mem.eql(u8, plan_args.backend, "subscription-agent")) {
             return std.fmt.allocPrint(allocator, "planner=subscription-agent fallback=heuristic topology={s} quota=0\n", .{@tagName(plan.topology)});
         }
+        if (std.mem.eql(u8, plan_args.backend, "capability")) {
+            var cap_plan = try @import("planner/capability.zig").plan(allocator, .{ .request = plan_args.request });
+            defer planner.deinitPlan(allocator, &cap_plan);
+            return std.fmt.allocPrint(allocator, "planner=capability topology={s} quota=0\n", .{@tagName(cap_plan.topology)});
+        }
         return std.fmt.allocPrint(allocator, "planner=heuristic topology={s} quota=0\n", .{@tagName(plan.topology)});
     }
     if (std.mem.eql(u8, cmd, "doctor")) {
@@ -167,8 +234,17 @@ pub fn runAlloc(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
             .agents = defaultAgentReports(),
         });
     }
-    if (std.mem.eql(u8, cmd, "agents")) {
+    if (std.mem.eql(u8, cmd, "agents") or std.mem.eql(u8, cmd, "list-agents")) {
         return renderAgents(allocator, defaultAgentReports());
+    }
+    if (std.mem.eql(u8, cmd, "status")) {
+        const summary = usage.Summary{};
+        return std.fmt.allocPrint(allocator, "agents=3 runnable=0 ledger_calls={d} successes={d} failures={d} rate_limits={d}\n  claude compatibility=unknown auth=unknown runnable=false\n  codex compatibility=unknown auth=unknown runnable=false\n  agy compatibility=unknown auth=unknown runnable=false\n", .{
+            summary.calls,
+            summary.successes,
+            summary.failures,
+            summary.rate_limits,
+        });
     }
     if (std.mem.eql(u8, cmd, "usage")) {
         const events = [_]usage.Event{.{ .agent = "fixture", .reported_tokens = null, .rate_limited = false, .ok = true }};
@@ -412,24 +488,47 @@ pub fn numberedLinesAround(allocator: std.mem.Allocator, text: []const u8, first
 
 fn helpText(allocator: std.mem.Allocator) ![]u8 {
     return allocator.dupe(u8,
-        \\Usage: openfugu [options] "task"
+        \\Usage: openfugu [subcommand] [options] "task"
         \\       openfugu
         \\
         \\Run without arguments to start the interactive TUI.
         \\
-        \\Commands:
-        \\  openfugu doctor
-        \\  openfugu agents
-        \\  openfugu usage --since 1d
-        \\  openfugu replay <run-id>
+        \\Subcommands (recommended for coding agents):
+        \\  openfugu route "task"        print routing decision without running
+        \\  openfugu run "task"          route and execute the task
+        \\  openfugu list-agents         list detected agents and runnability
+        \\  openfugu status              summary of agents and ledger health
+        \\  openfugu plan [--planner P] "task"   preview workflow plan
+        \\  openfugu doctor              setup and dependency diagnostics
+        \\  openfugu agents              list runnable agents (alias: list-agents)
+        \\  openfugu usage [--since 1d]  routing ledger usage summary
+        \\  openfugu replay <run-id>     show ledger replay for a run
         \\
-        \\Options:
-        \\  --no-apply          run without applying the candidate patch
-        \\  --explain-routing   print router score and selected agent
-        \\  --route-only        print router score without executing an agent
-        \\  --agents <name>     restrict execution to one agent
-        \\                       aliases: claude, claudecode, claude-code, codex, agy, antigravity
-        \\  --planner <name>    heuristic or subscription-agent
+        \\Options (both --flag value and --flag=value are accepted):
+        \\  --no-apply             run without applying the candidate patch
+        \\  --explain-routing      print router score and selected agent
+        \\  --route-only           print router score without executing
+        \\  --agents <name>        restrict execution to one agent
+        \\                         aliases: claude, claudecode, claude-code,
+        \\                                   codex, agy, antigravity
+        \\  --mode <name>          auto, single, race, ensemble
+        \\  --planner <name>       heuristic, subscription-agent, capability
+        \\  --depth <n>            execution depth override
+        \\  --cooldown-agent <name> exclude an agent from this run
+        \\
+        \\Exit codes:
+        \\  0   ok
+        \\  2   usage error
+        \\  3   no subscription-compatible agent available
+        \\  4   budget exhausted
+        \\  5   verification failed
+        \\  6   workspace error
+        \\  7   planner error
+        \\  8   compatibility error
+        \\  130 canceled (SIGINT)
+        \\
+        \\Coding-agent tip: run `openfugu route "task"` first to inspect the
+        \\routing decision cheaply, then `openfugu run "task"` to execute.
         \\
     );
 }
@@ -441,6 +540,10 @@ fn taskText(args: []const []const u8) !?[]const u8 {
     if (std.mem.eql(u8, cmd, "plan")) return null;
     if (std.mem.eql(u8, cmd, "doctor")) return null;
     if (std.mem.eql(u8, cmd, "agents")) return null;
+    if (std.mem.eql(u8, cmd, "list-agents")) return null;
+    if (std.mem.eql(u8, cmd, "route")) return null;
+    if (std.mem.eql(u8, cmd, "run")) return null;
+    if (std.mem.eql(u8, cmd, "status")) return null;
     if (std.mem.eql(u8, cmd, "usage")) return null;
     if (std.mem.eql(u8, cmd, "replay")) return null;
 
@@ -453,6 +556,10 @@ fn taskText(args: []const []const u8) !?[]const u8 {
             std.mem.eql(u8, arg, "--reject-model-review") or
             std.mem.eql(u8, arg, "--route-only") or
             std.mem.eql(u8, arg, "--explain-routing")) continue;
+        if (isInlineValue(arg)) {
+            // --flag=value: no separate value token to consume.
+            continue;
+        }
         if (takesValue(arg)) {
             i += 1;
             if (i >= args.len) return error.InvalidArgs;
@@ -463,6 +570,27 @@ fn taskText(args: []const []const u8) !?[]const u8 {
         return arg;
     }
     return error.InvalidArgs;
+}
+
+/// isInlineValue reports whether arg is a --flag=value form for a flag
+/// we recognise. We accept both the inline form and the two-token form,
+/// so coding agents that prefer --flag=value can use it directly.
+fn isInlineValue(arg: []const u8) bool {
+    const known = [_][]const u8{ "--mode", "--agents", "--planner", "--depth", "--cooldown-agent" };
+    for (known) |flag| {
+        if (std.mem.startsWith(u8, arg, flag) and arg.len > flag.len and arg[flag.len] == '=') return true;
+    }
+    return false;
+}
+
+fn inlineValue(arg: []const u8) ?[]const u8 {
+    const known = [_][]const u8{ "--mode", "--agents", "--planner", "--depth", "--cooldown-agent" };
+    for (known) |flag| {
+        if (std.mem.startsWith(u8, arg, flag) and arg.len > flag.len and arg[flag.len] == '=') {
+            return arg[flag.len + 1 ..];
+        }
+    }
+    return null;
 }
 
 fn takesValue(arg: []const u8) bool {
@@ -487,7 +615,8 @@ fn validMode(value: []const u8) bool {
 
 fn validPlanner(value: []const u8) bool {
     return std.mem.eql(u8, value, "heuristic") or
-        std.mem.eql(u8, value, "subscription-agent");
+        std.mem.eql(u8, value, "subscription-agent") or
+        std.mem.eql(u8, value, "capability");
 }
 
 const PlanArgs = struct {
@@ -501,6 +630,12 @@ fn parsePlanArgs(args: []const []const u8) !PlanArgs {
         if (args.len < 5) return error.InvalidArgs;
         if (!validPlanner(args[3])) return error.InvalidArgs;
         return .{ .backend = args[3], .request = args[4] };
+    }
+    if (std.mem.startsWith(u8, args[2], "--planner=")) {
+        const value = args[2]["--planner=".len..];
+        if (!validPlanner(value)) return error.InvalidArgs;
+        if (args.len < 4) return error.InvalidArgs;
+        return .{ .backend = value, .request = args[3] };
     }
     return .{ .backend = "subscription-agent", .request = args[2] };
 }
@@ -557,6 +692,39 @@ fn renderAgents(allocator: std.mem.Allocator, agents: []const probe.AgentReport)
         });
     }
     return out.toOwnedSlice(allocator);
+}
+
+fn countRunnable(reports: []const probe.AgentReport) usize {
+    var n: usize = 0;
+    for (reports) |agent| if (agent.runnable) {
+        n += 1;
+    };
+    return n;
+}
+
+/// subcommandTask extracts the first non-flag token from the args that
+/// follow a subcommand like `route` or `run`. It skips flags and their
+/// inline (--flag=value) or two-token (--flag value) values so the
+/// task text is identified correctly regardless of flag position.
+fn subcommandTask(args: []const []const u8) ?[]const u8 {
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--subscription-only") or
+            std.mem.eql(u8, arg, "--no-apply") or
+            std.mem.eql(u8, arg, "--require-model-review") or
+            std.mem.eql(u8, arg, "--reject-model-review") or
+            std.mem.eql(u8, arg, "--route-only") or
+            std.mem.eql(u8, arg, "--explain-routing")) continue;
+        if (isInlineValue(arg)) continue;
+        if (takesValue(arg)) {
+            i += 1;
+            continue;
+        }
+        if (std.mem.startsWith(u8, arg, "--")) continue;
+        return arg;
+    }
+    return null;
 }
 
 fn collectReports(allocator: std.mem.Allocator, io: std.Io, specs: []const probe.DetectSpec) ![]probe.AgentReport {
@@ -638,6 +806,10 @@ fn runFirstRunnableSpec(
             preferred_agent = hint.preferred_agent;
             router_name = "subscription-agent";
         }
+    } else if (std.mem.eql(u8, effective_planner, "capability")) {
+        router_name = "capability";
+    } else {
+        router_name = "heuristic";
     }
     for (candidates[0..candidate_count]) |*candidate| {
         const ledger_path = try runLedgerPath(allocator, worktree_root);
@@ -652,6 +824,7 @@ fn runFirstRunnableSpec(
             .calls = stats.calls,
             .successes = stats.successes,
             .failures = stats.failures,
+            .capability = candidate.spec.profile.capability,
         });
     }
     sortRoutingCandidates(candidates[0..candidate_count]);
@@ -795,6 +968,8 @@ fn fastRouterHint(
     task_text: []const u8,
     candidates: []const RoutingCandidate,
 ) !?policy.RouterHint {
+    // Try each candidate that exposes a dedicated router argv first.
+    // These are cheaper and more deterministic than a model prompt.
     for (candidates) |candidate| {
         if (candidate.spec.router_argv) |argv| {
             var result = try runner.run(allocator, io, .{
@@ -811,8 +986,13 @@ fn fastRouterHint(
             }
         }
     }
+    // Fall back to a structured-output model prompt. Try up to two
+    // candidates so a single agent's malformed output does not lose the
+    // router hint entirely.
+    var attempts: usize = 0;
     for (candidates) |candidate| {
         if (!candidate.report.structured_output) continue;
+        if (attempts >= 2) break;
         const prompt = try fastRouterPrompt(allocator, task_text);
         defer allocator.free(prompt);
         const task = types.Task{
@@ -830,6 +1010,7 @@ fn fastRouterHint(
         defer invocation.deinit(allocator);
         var result = runner.runInvocation(allocator, io, invocation.value, 30000) catch continue;
         defer result.deinit(allocator);
+        attempts += 1;
         if (result.exit_code == 0) {
             if (policy.parseRouterHint(result.stdout_tail)) |hint| return hint;
         }
@@ -838,9 +1019,18 @@ fn fastRouterHint(
 }
 
 fn fastRouterPrompt(allocator: std.mem.Allocator, task_text: []const u8) ![]u8 {
+    // The prompt is deliberately strict: it demands a single JSON object
+    // with exactly two string fields and nothing else. This makes the
+    // parser's job easier and reduces the chance of prose leaking into
+    // the output. Enumerating valid values tells the model the exact
+    // vocabulary we accept, so a miss is unambiguous.
     return std.fmt.allocPrint(
         allocator,
-        "Route this coding task. Return only JSON with task_kind and preferred_agent. task_kind must be one of general, bugfix, test_fix, refactor, terminal, review, frontend, broad. preferred_agent must be one of claude, codex, agy. Task: {s}",
+        "Route this coding task. Return ONLY a single JSON object on one line, no prose, no markdown fences. " ++
+            "Schema: {{\"task_kind\": string, \"preferred_agent\": string}}. " ++
+            "task_kind must be one of: general, bugfix, test_fix, refactor, terminal, review, frontend, broad. " ++
+            "preferred_agent must be one of: claude, codex, agy. " ++
+            "Do not include any other fields. Task: {s}",
         .{task_text},
     );
 }
@@ -868,6 +1058,15 @@ fn reviewFromArgs(args: []const []const u8) model_review.Review {
 }
 
 fn optionValue(args: []const []const u8, flag: []const u8) ?[]const u8 {
+    // --flag=value inline form takes precedence over the two-token form.
+    const inline_form = std.fmt.allocPrint(std.heap.page_allocator, "{s}=", .{flag}) catch return null;
+    defer std.heap.page_allocator.free(inline_form);
+    for (args) |arg| {
+        if (std.mem.startsWith(u8, arg, inline_form)) {
+            const value = arg[inline_form.len..];
+            if (value.len != 0) return value;
+        }
+    }
     var i: usize = 0;
     while (i + 1 < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], flag)) return args[i + 1];

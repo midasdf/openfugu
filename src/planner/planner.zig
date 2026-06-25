@@ -4,6 +4,7 @@ const types = @import("../core/types.zig");
 pub const PlannerBackend = enum {
     heuristic,
     subscription_agent,
+    capability,
 };
 
 pub fn deinitPlan(allocator: std.mem.Allocator, plan: *types.WorkflowPlan) void {

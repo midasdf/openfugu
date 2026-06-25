@@ -28,6 +28,7 @@ pub const scheduler = @import("conductor/scheduler.zig");
 pub const session = @import("proc/session.zig");
 pub const signal = @import("proc/signal.zig");
 pub const subscription_agent = @import("planner/subscription_agent.zig");
+pub const capability = @import("planner/capability.zig");
 pub const validate = @import("planner/validate.zig");
 pub const model_review = @import("verify/model_review.zig");
 pub const verify = @import("verify/commands.zig");
@@ -67,6 +68,7 @@ test {
     _ = session;
     _ = signal;
     _ = subscription_agent;
+    _ = capability;
     _ = validate;
     _ = model_review;
     _ = verify;

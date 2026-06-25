@@ -89,3 +89,64 @@ test "policy routes frontend design work toward antigravity fallback" {
         .kind = kind,
     }));
 }
+
+test "classifyTaskConfidence reports low confidence for keywordless text" {
+    const classified = openfugu.policy.classifyTaskConfidence("do something");
+    try std.testing.expectEqual(openfugu.policy.TaskKind.general, classified.kind);
+    try std.testing.expectEqual(openfugu.policy.ClassifyConfidence.low, classified.confidence);
+}
+
+test "classifyTaskConfidence reports high confidence for japanese keywords" {
+    const classified = openfugu.policy.classifyTaskConfidence("テストを修正する");
+    try std.testing.expectEqual(openfugu.policy.TaskKind.test_fix, classified.kind);
+    try std.testing.expectEqual(openfugu.policy.ClassifyConfidence.high, classified.confidence);
+}
+
+test "suggestAgent returns codex for terminal and test_fix" {
+    try std.testing.expectEqual(openfugu.policy.PreferredAgent.codex, openfugu.policy.suggestAgent(.terminal));
+    try std.testing.expectEqual(openfugu.policy.PreferredAgent.codex, openfugu.policy.suggestAgent(.test_fix));
+    try std.testing.expectEqual(openfugu.policy.PreferredAgent.claude, openfugu.policy.suggestAgent(.bugfix));
+    try std.testing.expectEqual(openfugu.policy.PreferredAgent.antigravity, openfugu.policy.suggestAgent(.frontend));
+    try std.testing.expectEqual(openfugu.policy.PreferredAgent.none, openfugu.policy.suggestAgent(.general));
+}
+
+test "nearestCommand suggests close typo" {
+    const known = [_][]const u8{ "help", "status", "agents", "plan" };
+    const suggestion = openfugu.policy.nearestCommand("stat", &known);
+    try std.testing.expectEqualStrings("status", suggestion orelse return error.MissingSuggestion);
+    try std.testing.expect(openfugu.policy.nearestCommand("zzz", &known) == null);
+}
+
+test "scoreAgent penalises agents in active cooldown" {
+    const hot = openfugu.policy.scoreAgent(.{
+        .id = "codex",
+        .profile_name = "codex",
+        .kind = .terminal,
+        .cooldown_until_ms = 10_000,
+        .now_ms = 1_000,
+    });
+    const cold = openfugu.policy.scoreAgent(.{
+        .id = "codex",
+        .profile_name = "codex",
+        .kind = .terminal,
+        .cooldown_until_ms = 0,
+        .now_ms = 1_000,
+    });
+    try std.testing.expect(hot < cold);
+}
+
+test "scoreAgent penalises agents lacking required capabilities" {
+    const with_caps = openfugu.policy.scoreAgent(.{
+        .id = "codex",
+        .profile_name = "codex",
+        .kind = .bugfix,
+        .capability = .{ .edit_files = true, .run_commands = true },
+    });
+    const without_caps = openfugu.policy.scoreAgent(.{
+        .id = "codex",
+        .profile_name = "codex",
+        .kind = .bugfix,
+        .capability = .{ .edit_files = false, .run_commands = false },
+    });
+    try std.testing.expect(with_caps > without_caps);
+}

@@ -153,7 +153,7 @@ fn repl(init: std.process.Init) !u8 {
                     \\  :apply   return to apply mode
                     \\  :agent   set agent: auto, claude, claudecode, codex, agy, antigravity
                     \\  :mode    set mode: auto, single, race, ensemble
-                    \\  :planner set planner: heuristic, subscription-agent
+                    \\  :planner set planner: heuristic, subscription-agent, capability
                     \\  :clear   clear this session
                     \\  :clear-history clear input and task history
                     \\  :history show task history
@@ -505,7 +505,7 @@ fn repl(init: std.process.Init) !u8 {
                 try writer.interface.writeAll(last_output);
             },
             .unknown_command => {
-                try replaceLog(init.gpa, &last_output, "unknown command\n");
+                try replaceLog(init.gpa, &last_output, try unknownCommandMessage(init.gpa, line));
                 try writer.interface.writeAll(last_output);
             },
             .task => |task| {
@@ -518,6 +518,36 @@ fn repl(init: std.process.Init) !u8 {
     }
     return openfugu.cli.exit_ok;
 }
+
+fn unknownCommandMessage(allocator: std.mem.Allocator, line: []const u8) ![]u8 {
+    const trimmed = std.mem.trim(u8, line, " \t\r\n");
+    // Strip the leading colon for suggestion matching.
+    const query = if (std.mem.startsWith(u8, trimmed, ":")) trimmed[1..] else trimmed;
+    const suggestion = openfugu.policy.nearestCommand(query, &known_commands) orelse "";
+    if (suggestion.len != 0) {
+        return std.fmt.allocPrint(allocator, "unknown command: {s}\ndid you mean: :{s} ?\n", .{ trimmed, suggestion });
+    }
+    return std.fmt.allocPrint(allocator, "unknown command: {s}\ntype :help for the full command list.\n", .{trimmed});
+}
+
+const known_commands = [_][]const u8{
+    "help",        "status",                "reset-routing",        "plan",         "route",
+    "replay",      "doctor",                "agents",               "usage",        "ledger",
+    "where",       "pwd",                   "worktrees",            "git",          "changed",
+    "remote",      "branch",                "branches",             "tags",         "describe",
+    "log",         "diff",                  "staged",               "staged-patch", "patch",
+    "ci",          "watch-ci",              "pr",                   "issues",       "issue",
+    "verify",      "build",                 "test",                 "fmt",          "check",
+    "cancel",      "last",                  "rerun",                "fetch",        "pull",
+    "push",        "push-force-with-lease", "stash",                "stashes",      "stash-show",
+    "stash-patch", "stash-pop",             "save",                 "stage",        "unstage",
+    "commit",      "commit-amend",          "commit-amend-no-edit", "switch",       "new-branch",
+    "show",        "run",                   "rg",                   "todo",         "ls",
+    "files",       "cd",                    "cwd",                  "load",         "open",
+    "head",        "tail",                  "dry-run",              "no-apply",     "apply",
+    "agent",       "mode",                  "planner",              "clear",        "clear-history",
+    "history",     "quit",
+};
 
 fn runReplTask(
     init: std.process.Init,
@@ -732,6 +762,7 @@ fn rawRepl(init: std.process.Init) !u8 {
         ":mode ensemble",
         ":planner heuristic",
         ":planner subscription-agent",
+        ":planner capability",
         ":clear",
         ":clear-history",
         ":history",
@@ -1339,7 +1370,7 @@ fn handleInteractiveLine(
             planner.* = try init.gpa.dupe(u8, value);
             try replaceLog(init.gpa, last_output, "planner updated\n");
         },
-        .unknown_command => try replaceLog(init.gpa, last_output, "unknown command\n"),
+        .unknown_command => try replaceLog(init.gpa, last_output, try unknownCommandMessage(init.gpa, line)),
         .task => |task| {
             try startOpenfuguTask(init, task, last_output, agents, history, dry_run, agent_filter, mode, planner, term, job);
         },
@@ -2056,5 +2087,5 @@ fn validMode(value: []const u8) bool {
 }
 
 fn validPlanner(value: []const u8) bool {
-    return std.mem.eql(u8, value, "heuristic") or std.mem.eql(u8, value, "subscription-agent");
+    return std.mem.eql(u8, value, "heuristic") or std.mem.eql(u8, value, "subscription-agent") or std.mem.eql(u8, value, "capability");
 }

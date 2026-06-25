@@ -45,6 +45,16 @@ openfugu --help
 openfugu doctor
 ```
 
+## Coding-agent skill
+
+`skills/openfugu/SKILL.md` is a bundled skill for coding agents
+(opencode, Claude Code, Codex). Install it into your agent's skills
+directory (e.g. `~/.agents/skills/openfugu/SKILL.md`) and the agent can
+route tasks through openfugu using the recommended
+`doctor -> route -> run` flow. The skill documents the subcommands,
+planners, exit codes, and task-kind vocabulary so the agent never has
+to read `--help` to discover the interface.
+
 Real CLI smoke checks are opt-in because they can consume provider quota:
 
 ```sh
@@ -63,7 +73,9 @@ The normal test suite uses fake agents and temporary git repositories only.
 Task execution uses the subscription-agent planner by default. It asks an
 available subscription CLI to route the task first, then falls back to local
 scoring if the router output is invalid. Pass `--planner heuristic` to skip the
-subscription router. Add `--explain-routing` to print the route, preferred
+subscription router, or `--planner capability` to use a deterministic
+capability-aware planner that gates agents on edit_files / run_commands /
+structured_output. Add `--explain-routing` to print the route, preferred
 agent, score, and selected agent. Local scoring also uses prior accepted/failed
 outcomes from the local ledger.
 
@@ -73,12 +85,31 @@ outcomes from the local ledger.
 openfugu --help
 openfugu
 
-# Run setup and dependency diagnostics
+# Inspect routing without running (no quota consumed)
+openfugu route "your task"
+
+# Route and execute
+openfugu run "your task"
+
+# Dry run (candidate worktree only, no apply)
+openfugu run --no-apply "your task"
+
+# Setup and dependency diagnostics
 openfugu doctor
+
+# Agent and ledger summary
+openfugu status
+openfugu list-agents
 
 # View routing decisions and agent selection details
 openfugu --explain-routing "your task"
 ```
+
+Both `--flag value` and `--flag=value` are accepted. The explicit
+subcommands `route` and `run` are the recommended entry points for
+coding agents because they avoid ambiguity about what is a flag and
+what is the task text. The positional form (`openfugu "task"`) still
+works for backward compatibility.
 
 Use the `--no-apply` flag to perform dry runs.
 

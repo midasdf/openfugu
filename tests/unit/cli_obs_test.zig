@@ -40,6 +40,33 @@ test "plan defaults to subscription planner" {
     try std.testing.expect(std.mem.indexOf(u8, plan, "fallback=heuristic") != null);
 }
 
+test "plan accepts capability planner" {
+    const plan = try openfugu.cli.runAlloc(std.testing.allocator, &.{ "openfugu", "plan", "--planner", "capability", "fix typo" });
+    defer std.testing.allocator.free(plan);
+
+    try std.testing.expect(std.mem.indexOf(u8, plan, "planner=capability") != null);
+}
+
+test "plan accepts inline --planner=value form" {
+    const plan = try openfugu.cli.runAlloc(std.testing.allocator, &.{ "openfugu", "plan", "--planner=capability", "fix typo" });
+    defer std.testing.allocator.free(plan);
+
+    try std.testing.expect(std.mem.indexOf(u8, plan, "planner=capability") != null);
+}
+
+test "list-agents subcommand reports fixture agents" {
+    const agents = try openfugu.cli.runAlloc(std.testing.allocator, &.{ "openfugu", "list-agents" });
+    defer std.testing.allocator.free(agents);
+    try std.testing.expect(std.mem.indexOf(u8, agents, "claude") != null);
+}
+
+test "status subcommand reports agent and ledger summary" {
+    const status = try openfugu.cli.runAlloc(std.testing.allocator, &.{ "openfugu", "status" });
+    defer std.testing.allocator.free(status);
+    try std.testing.expect(std.mem.indexOf(u8, status, "agents=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status, "ledger_calls=") != null);
+}
+
 test "ledger omits content and redacts secret values by default" {
     const event = openfugu.ledger.Event{
         .run_id = "r1",

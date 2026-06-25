@@ -14,12 +14,32 @@ pub const Result = union(enum) {
     delegated: planner.PlannerBackend,
 };
 
+/// planOrFallback validates the router output before use. It tries the
+/// two-node chain parser first (because it is the most specific shape),
+/// then the minimal single-node parser, then falls back to heuristic.
+/// A third fallback to heuristic.plan is the last resort so a broken
+/// router output never produces an empty plan.
 pub fn planOrFallback(allocator: std.mem.Allocator, req: Request, raw_output: []const u8) !types.WorkflowPlan {
     if (looksLikeWorkflowJson(raw_output)) {
         if (std.mem.indexOf(u8, raw_output, "\"id\":2") != null) {
-            if (parseTwoNodeChain(allocator, raw_output)) |plan| return plan else |_| {}
+            if (parseTwoNodeChain(allocator, raw_output)) |plan_const| {
+                var plan = plan_const;
+                validate.validatePlan(plan) catch {
+                    planner.deinitPlan(allocator, &plan);
+                    return heuristic.plan(allocator, .{ .request = req.original_request });
+                };
+                return plan;
+            } else |_| {}
         }
-        if (parseMinimalPlan(allocator, raw_output)) |plan| return plan else |_| {}
+        if (parseMinimalPlan(allocator, raw_output)) |plan_const| {
+            var plan = plan_const;
+            validate.validatePlan(plan) catch {
+                planner.deinitPlan(allocator, &plan);
+                return heuristic.plan(allocator, .{ .request = req.original_request });
+            };
+            return plan;
+        } else |_| {}
+        // JSON-shaped but unparseable: fall through to heuristic.
         return heuristic.plan(allocator, .{ .request = req.original_request });
     }
     return heuristic.plan(allocator, .{ .request = req.original_request });
