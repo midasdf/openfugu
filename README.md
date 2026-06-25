@@ -91,6 +91,12 @@ openfugu route "your task"
 # Route and execute
 openfugu run "your task"
 
+# Fire a task and return immediately; poll or wait for the result
+openfugu submit "your task"
+openfugu poll <job-id>
+openfugu wait <job-id>
+openfugu jobs
+
 # Dry run (candidate worktree only, no apply)
 openfugu run --no-apply "your task"
 

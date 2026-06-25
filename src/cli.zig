@@ -16,6 +16,7 @@ const verify = @import("verify/commands.zig");
 const types = @import("core/types.zig");
 const adapter = @import("adapter/adapter.zig");
 const ledger = @import("obs/ledger.zig");
+const jobs = @import("obs/jobs.zig");
 const model_review = @import("verify/model_review.zig");
 
 const claude_version_argv = [_][]const u8{ "claude", "--version" };
@@ -169,7 +170,7 @@ pub fn runWithProbeSpecsInRepo(
                 .text = try allocator.dupe(u8, "usage: openfugu route \"task\"\n"),
             };
         };
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), true);
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), true, optionValue(args, "--job-id"));
     }
     // run <task> is the explicit subcommand form of the positional task.
     // It is the recommended entry point for coding agents because it
@@ -181,7 +182,39 @@ pub fn runWithProbeSpecsInRepo(
                 .text = try allocator.dupe(u8, "usage: openfugu run \"task\"\n"),
             };
         };
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), hasFlag(args, "--route-only"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), hasFlag(args, "--route-only"), optionValue(args, "--job-id"));
+    }
+    // submit <task> spawns a detached `openfugu run --job-id=<id> "task"`
+    // child and returns immediately with the job id. The child updates
+    // the job file at start and completion so poll/wait can read status
+    // without a daemon.
+    if (std.mem.eql(u8, args[1], "submit")) {
+        return submitJob(allocator, io, args, repo_path);
+    }
+    // poll <job-id> reads the job file and prints its current status.
+    if (std.mem.eql(u8, args[1], "poll")) {
+        if (args.len < 3) {
+            return .{
+                .code = exit_usage,
+                .text = try allocator.dupe(u8, "usage: openfugu poll <job-id>\n"),
+            };
+        }
+        return pollJob(allocator, io, args[2]);
+    }
+    // wait <job-id> blocks until the job reaches a terminal status, then
+    // prints the final status. Exits with the job's exit code when known.
+    if (std.mem.eql(u8, args[1], "wait")) {
+        if (args.len < 3) {
+            return .{
+                .code = exit_usage,
+                .text = try allocator.dupe(u8, "usage: openfugu wait <job-id>\n"),
+            };
+        }
+        return waitJob(allocator, io, args[2]);
+    }
+    // jobs lists all known job ids and their statuses.
+    if (std.mem.eql(u8, args[1], "jobs")) {
+        return listJobs(allocator, io);
     }
     if (std.mem.eql(u8, args[1], "doctor") or std.mem.eql(u8, args[1], "agents")) {
         const reports = try collectReports(allocator, io, specs);
@@ -201,7 +234,7 @@ pub fn runWithProbeSpecsInRepo(
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
     if (try taskText(args)) |task| {
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), hasFlag(args, "--route-only"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), hasFlag(args, "--route-only"), optionValue(args, "--job-id"));
     }
     return run(allocator, args);
 }
@@ -496,6 +529,10 @@ fn helpText(allocator: std.mem.Allocator) ![]u8 {
         \\Subcommands (recommended for coding agents):
         \\  openfugu route "task"        print routing decision without running
         \\  openfugu run "task"          route and execute the task
+        \\  openfugu submit "task"       fire a task and return immediately (async)
+        \\  openfugu poll <job-id>       check status of a submitted job
+        \\  openfugu wait <job-id>       block until a submitted job finishes
+        \\  openfugu jobs                list all known job ids and statuses
         \\  openfugu list-agents         list detected agents and runnability
         \\  openfugu status              summary of agents and ledger health
         \\  openfugu plan [--planner P] "task"   preview workflow plan
@@ -543,6 +580,10 @@ fn taskText(args: []const []const u8) !?[]const u8 {
     if (std.mem.eql(u8, cmd, "list-agents")) return null;
     if (std.mem.eql(u8, cmd, "route")) return null;
     if (std.mem.eql(u8, cmd, "run")) return null;
+    if (std.mem.eql(u8, cmd, "submit")) return null;
+    if (std.mem.eql(u8, cmd, "poll")) return null;
+    if (std.mem.eql(u8, cmd, "wait")) return null;
+    if (std.mem.eql(u8, cmd, "jobs")) return null;
     if (std.mem.eql(u8, cmd, "status")) return null;
     if (std.mem.eql(u8, cmd, "usage")) return null;
     if (std.mem.eql(u8, cmd, "replay")) return null;
@@ -576,7 +617,7 @@ fn taskText(args: []const []const u8) !?[]const u8 {
 /// we recognise. We accept both the inline form and the two-token form,
 /// so coding agents that prefer --flag=value can use it directly.
 fn isInlineValue(arg: []const u8) bool {
-    const known = [_][]const u8{ "--mode", "--agents", "--planner", "--depth", "--cooldown-agent" };
+    const known = [_][]const u8{ "--mode", "--agents", "--planner", "--depth", "--cooldown-agent", "--job-id" };
     for (known) |flag| {
         if (std.mem.startsWith(u8, arg, flag) and arg.len > flag.len and arg[flag.len] == '=') return true;
     }
@@ -584,7 +625,7 @@ fn isInlineValue(arg: []const u8) bool {
 }
 
 fn inlineValue(arg: []const u8) ?[]const u8 {
-    const known = [_][]const u8{ "--mode", "--agents", "--planner", "--depth", "--cooldown-agent" };
+    const known = [_][]const u8{ "--mode", "--agents", "--planner", "--depth", "--cooldown-agent", "--job-id" };
     for (known) |flag| {
         if (std.mem.startsWith(u8, arg, flag) and arg.len > flag.len and arg[flag.len] == '=') {
             return arg[flag.len + 1 ..];
@@ -598,7 +639,8 @@ fn takesValue(arg: []const u8) bool {
         std.mem.eql(u8, arg, "--agents") or
         std.mem.eql(u8, arg, "--planner") or
         std.mem.eql(u8, arg, "--depth") or
-        std.mem.eql(u8, arg, "--cooldown-agent");
+        std.mem.eql(u8, arg, "--cooldown-agent") or
+        std.mem.eql(u8, arg, "--job-id");
 }
 
 fn validateOptionValue(flag: []const u8, value: []const u8) !void {
@@ -775,7 +817,27 @@ fn runFirstRunnableSpec(
     cooldown_filter: ?[]const u8,
     explain_routing: bool,
     route_only: bool,
+    job_id: ?[]const u8,
 ) !Result {
+    // When invoked via `submit`, the child is given --job-id=<id>. We
+    // update the job file at start and completion so poll/wait work
+    // without a daemon.
+    const has_job = job_id != null;
+    if (has_job) {
+        jobs.write(allocator, io, .{
+            .id = job_id.?,
+            .status = .running,
+            .task = task_text,
+            .started_ms = nowMs(io),
+        }) catch {};
+    }
+    // errdefer at function scope so it fires on any error return from
+    // this point onward, regardless of which block raised the error.
+    errdefer {
+        if (has_job) {
+            finishJob(allocator, io, job_id.?, exit_planner, "", "heuristic", "unknown", "error before completion") catch {};
+        }
+    }
     try std.Io.Dir.cwd().createDirPath(io, worktree_root);
     var candidates = try allocator.alloc(RoutingCandidate, specs.len);
     defer allocator.free(candidates);
@@ -906,6 +968,7 @@ fn runFirstRunnableSpec(
 
         const code = if (summary.accepted and (no_apply or (summary.applied and summary.reverified))) exit_ok else exit_verify;
         if (code != exit_ok and continuesAfterFailure(mode, depth)) continue;
+        if (has_job) try finishJob(allocator, io, job_id.?, code, candidate.report.name, router_name, @tagName(kind), summary_text(summary));
         if (explain_routing) {
             return .{
                 .code = code,
@@ -934,15 +997,45 @@ fn runFirstRunnableSpec(
         };
     }
     if (candidate_count != 0) {
+        if (has_job) try finishJob(allocator, io, job_id.?, exit_verify, "", router_name, @tagName(kind), "no candidate passed verification");
         return .{
             .code = exit_verify,
             .text = try allocator.dupe(u8, "no candidate passed verification\n"),
         };
     }
+    if (has_job) try finishJob(allocator, io, job_id.?, exit_no_agent, "", router_name, @tagName(kind), "no subscription-compatible agent available");
     return .{
         .code = exit_no_agent,
         .text = try allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n"),
     };
+}
+
+fn summary_text(summary: conductor.RunSummary) []const u8 {
+    if (summary.accepted and summary.applied and summary.reverified) return "accepted applied reverified";
+    if (summary.accepted) return "accepted not-applied";
+    return "verification failed";
+}
+
+fn finishJob(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    job_id: []const u8,
+    exit_code: u8,
+    agent: []const u8,
+    router: []const u8,
+    route: []const u8,
+    summary: []const u8,
+) !void {
+    jobs.write(allocator, io, .{
+        .id = job_id,
+        .status = if (exit_code == exit_ok) .ok else .failed,
+        .agent = agent,
+        .router = router,
+        .route = route,
+        .exit_code = exit_code,
+        .ended_ms = nowMs(io),
+        .summary = summary,
+    }) catch {};
 }
 
 fn sortRoutingCandidates(candidates: []RoutingCandidate) void {
@@ -1166,4 +1259,217 @@ fn defaultVerifyCommands() []const verify.Command {
         .{ .name = "build", .argv = &.{ "zig", "build" } },
         .{ .name = "test", .argv = &.{ "zig", "build", "test" } },
     };
+}
+
+// ---------------------------------------------------------------------------
+// Async job CLI: submit / poll / wait / jobs
+// ---------------------------------------------------------------------------
+
+fn submitJob(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    args: []const []const u8,
+    repo_path: []const u8,
+) !Result {
+    const task = subcommandTask(args[2..]) orelse {
+        return .{
+            .code = exit_usage,
+            .text = try allocator.dupe(u8, "usage: openfugu submit \"task\"\n"),
+        };
+    };
+    // Generate a short unique id: timestamp + random suffix.
+    const id = try generateJobId(allocator, io);
+    defer allocator.free(id);
+
+    // Write the queued job file before spawning so poll sees it even
+    // if the child has not started yet.
+    try jobs.write(allocator, io, .{
+        .id = id,
+        .status = .queued,
+        .task = task,
+        .created_ms = nowMs(io),
+    });
+
+    // Build the child argv: openfugu run --job-id=<id> [flags] "task"
+    var child_argv = std.array_list.Managed([]const u8).init(allocator);
+    defer child_argv.deinit();
+    const self_path = try std.process.executablePathAlloc(io, allocator);
+    defer allocator.free(self_path);
+    try child_argv.append(self_path);
+    const job_id_flag = try std.fmt.allocPrint(allocator, "--job-id={s}", .{id});
+    defer allocator.free(job_id_flag);
+    try child_argv.append("run");
+    try child_argv.append(job_id_flag);
+    // Forward select flags so submit respects --planner / --agents / --mode.
+    const planners = optionValue(args, "--planner");
+    if (planners) |p| {
+        const inline_flag = try std.fmt.allocPrint(allocator, "--planner={s}", .{p});
+        defer allocator.free(inline_flag);
+        try child_argv.append(inline_flag);
+    }
+    const agents = optionValue(args, "--agents");
+    if (agents) |a| {
+        const inline_flag = try std.fmt.allocPrint(allocator, "--agents={s}", .{a});
+        defer allocator.free(inline_flag);
+        try child_argv.append(inline_flag);
+    }
+    const mode = optionValue(args, "--mode");
+    if (mode) |m| {
+        const inline_flag = try std.fmt.allocPrint(allocator, "--mode={s}", .{m});
+        defer allocator.free(inline_flag);
+        try child_argv.append(inline_flag);
+    }
+    if (hasFlag(args, "--no-apply")) try child_argv.append("--no-apply");
+    try child_argv.append(task);
+
+    // Spawn detached. We do not wait. The child updates the job file
+    // itself. Setting child.id to null after spawn prevents the Child
+    // deinit from killing the process when it goes out of scope.
+    _ = repo_path; // child resolves its own cwd from the inherited cwd.
+    var child = std.process.spawn(io, .{
+        .argv = child_argv.items,
+        .stdin = .ignore,
+        .stdout = .ignore,
+        .stderr = .ignore,
+    }) catch |err| {
+        // Mark the job failed so poll/wait do not hang.
+        try jobs.write(allocator, io, .{
+            .id = id,
+            .status = .failed,
+            .task = task,
+            .created_ms = nowMs(io),
+            .ended_ms = nowMs(io),
+            .summary = @errorName(err),
+        });
+        const text = try std.fmt.allocPrint(allocator, "submit failed: {s}\njob_id={s}\n", .{ @errorName(err), id });
+        return .{ .code = exit_planner, .text = text };
+    };
+    // Detach: clear the id so deinit does not kill the child.
+    child.id = null;
+
+    return .{
+        .code = exit_ok,
+        .text = try std.fmt.allocPrint(allocator, "job_id={s}\nstatus=queued\npoll with: openfugu poll {s}\n", .{ id, id }),
+    };
+}
+
+fn pollJob(allocator: std.mem.Allocator, io: std.Io, id: []const u8) !Result {
+    var job = (try jobs.read(allocator, io, id)) orelse {
+        return .{
+            .code = exit_no_agent,
+            .text = try std.fmt.allocPrint(allocator, "job {s} not found\n", .{id}),
+        };
+    };
+    defer jobs.deinitJob(allocator, &job);
+    const text = try renderJob(allocator, job);
+    return .{
+        .code = if (job.status == .ok) exit_ok else if (job.status == .failed or job.status == .canceled) exit_verify else exit_ok,
+        .text = text,
+    };
+}
+
+fn waitJob(allocator: std.mem.Allocator, io: std.Io, id: []const u8) !Result {
+    // Poll loop: read the job file, sleep, repeat. We do not maintain a
+    // daemon, so this is a stateless file poll. The child is responsible
+    // for updating the file at completion.
+    const deadline_ms = nowMs(io) + 30 * 60 * 1000; // 30 minute cap.
+    while (true) {
+        var job = (try jobs.read(allocator, io, id)) orelse {
+            return .{
+                .code = exit_no_agent,
+                .text = try std.fmt.allocPrint(allocator, "job {s} not found\n", .{id}),
+            };
+        };
+        const done = job.status == .ok or job.status == .failed or job.status == .canceled;
+        if (done) {
+            const text = try renderJob(allocator, job);
+            const code = if (job.status == .ok) exit_ok else if (job.exit_code) |c| c else exit_verify;
+            jobs.deinitJob(allocator, &job);
+            return .{ .code = code, .text = text };
+        }
+        jobs.deinitJob(allocator, &job);
+        if (nowMs(io) >= deadline_ms) {
+            return .{
+                .code = exit_budget,
+                .text = try std.fmt.allocPrint(allocator, "job {s} timed out waiting for completion\n", .{id}),
+            };
+        }
+        // Sleep 500ms between polls. This is a background wait, not a
+        // tight loop, so the cost is negligible.
+        io.sleep(std.Io.Duration.fromMilliseconds(500), .awake) catch {};
+    }
+}
+
+fn listJobs(allocator: std.mem.Allocator, io: std.Io) !Result {
+    const ids = try jobs.listIds(allocator, io);
+    defer {
+        for (ids) |id| allocator.free(id);
+        allocator.free(ids);
+    }
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    if (ids.len == 0) {
+        try out.appendSlice(allocator, "no jobs\n");
+        return .{ .code = exit_ok, .text = try out.toOwnedSlice(allocator) };
+    }
+    for (ids) |id| {
+        var job = (try jobs.read(allocator, io, id)) orelse {
+            try out.print(allocator, "{s} status=missing\n", .{id});
+            continue;
+        };
+        defer jobs.deinitJob(allocator, &job);
+        try out.print(allocator, "{s} status={s} agent={s} exit={?}\n", .{
+            job.id,
+            @tagName(job.status),
+            if (job.agent.len == 0) "unknown" else job.agent,
+            job.exit_code,
+        });
+    }
+    return .{ .code = exit_ok, .text = try out.toOwnedSlice(allocator) };
+}
+
+fn renderJob(allocator: std.mem.Allocator, job: jobs.Job) ![]u8 {
+    return std.fmt.allocPrint(allocator,
+        \\id={s}
+        \\status={s}
+        \\task={s}
+        \\agent={s}
+        \\router={s}
+        \\route={s}
+        \\exit_code={?}
+        \\created_ms={d}
+        \\started_ms={d}
+        \\ended_ms={d}
+        \\summary={s}
+        \\
+    , .{
+        job.id,
+        @tagName(job.status),
+        job.task,
+        if (job.agent.len == 0) "unknown" else job.agent,
+        if (job.router.len == 0) "unknown" else job.router,
+        if (job.route.len == 0) "unknown" else job.route,
+        job.exit_code,
+        job.created_ms,
+        job.started_ms,
+        job.ended_ms,
+        job.summary,
+    });
+}
+
+fn generateJobId(allocator: std.mem.Allocator, io: std.Io) ![]u8 {
+    // job_<ms>_<pid4hex>: timestamp ensures ordering, pid adds uniqueness
+    // within a single millisecond. Good enough for a local jobs dir.
+    const ms = nowMs(io);
+    const pid: u32 = @intCast(std.os.linux.getpid());
+    return std.fmt.allocPrint(allocator, "job_{d}_{x:0>8}", .{ ms, pid });
+}
+
+fn nowMs(io: std.Io) u64 {
+    // Best-effort wall-clock timestamp in milliseconds. Falls back to 0
+    // if the clock is unavailable; jobs still work because status is the
+    // field pollers check, not the timestamp.
+    const ts = std.Io.Timestamp.now(io, .real);
+    const ms = ts.toMilliseconds();
+    return @intCast(@max(ms, 0));
 }

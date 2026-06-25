@@ -9,4 +9,5 @@ test {
     _ = @import("unit/cli_obs_test.zig");
     _ = @import("unit/config_doctor_test.zig");
     _ = @import("unit/probe_test.zig");
+    _ = @import("unit/jobs_test.zig");
 }

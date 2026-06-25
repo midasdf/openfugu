@@ -12,6 +12,7 @@ pub const doctor = @import("obs/doctor.zig");
 pub const recovery = @import("obs/recovery.zig");
 pub const probe = @import("adapter/probe.zig");
 pub const ledger = @import("obs/ledger.zig");
+pub const jobs = @import("obs/jobs.zig");
 pub const replay = @import("obs/replay.zig");
 pub const trace = @import("obs/trace.zig");
 pub const usage = @import("obs/usage.zig");
@@ -52,6 +53,7 @@ test {
     _ = recovery;
     _ = probe;
     _ = ledger;
+    _ = jobs;
     _ = replay;
     _ = trace;
     _ = usage;

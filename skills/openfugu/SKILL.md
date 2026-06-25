@@ -64,6 +64,23 @@ Do NOT use openfugu for:
    accepted commit with `cherry-pick --no-commit`, and re-runs the
    same verification on the real working tree.
 
+## Async job CLI
+
+For fire-and-forget tasks, openfugu provides a daemon-less async
+flow. Job state is a single JSON file per job under
+`.openfugu/jobs/<id>.json`, so polling is a stateless file read.
+
+```
+openfugu submit "your task"     # returns immediately with job_id
+openfugu poll <job-id>          # check status without blocking
+openfugu wait <job-id>          # block until the job finishes
+openfugu jobs                   # list all known job ids and statuses
+```
+
+Status values: `queued`, `running`, `ok`, `failed`, `canceled`.
+`wait` exits with the job's exit code when known, so it composes
+with shell scripts.
+
 ## Flag forms
 
 Both `--flag value` and `--flag=value` are accepted everywhere. Coding
