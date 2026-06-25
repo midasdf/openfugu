@@ -6,6 +6,9 @@ const zz = @import("zigzag");
 pub fn main(init: std.process.Init) !u8 {
     const args = try init.minimal.args.toSlice(init.arena.allocator());
     if (args.len <= 1) return repl(init);
+    if (std.mem.eql(u8, args[1], "mcp")) {
+        return openfugu.mcp.run(init.gpa, init.io);
+    }
 
     var result = openfugu.cli.runWithIo(init.gpa, init.io, args) catch |err| switch (err) {
         error.InvalidArgs => return openfugu.cli.exit_usage,

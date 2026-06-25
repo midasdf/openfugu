@@ -1,6 +1,7 @@
 pub const config = @import("config.zig");
 pub const cli = @import("cli.zig");
 pub const tui = @import("tui.zig");
+pub const mcp = @import("mcp.zig");
 pub const types = @import("core/types.zig");
 pub const budget = @import("core/budget.zig");
 pub const adapter = @import("adapter/adapter.zig");
@@ -42,6 +43,7 @@ test {
     _ = config;
     _ = cli;
     _ = tui;
+    _ = mcp;
     _ = types;
     _ = budget;
     _ = adapter;

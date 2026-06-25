@@ -163,3 +163,22 @@ the ledger.
 - The default policy is subscription-only. API-key, unauthenticated,
   and unknown auth are rejected unless an explicit policy says
   otherwise.
+
+## MCP server mode
+
+openfugu speaks MCP (Model Context Protocol) over stdio so coding
+agents can call it as a local MCP server without spawning the CLI:
+
+```jsonc
+"mcp": {
+  "openfugu": {
+    "type": "local",
+    "command": ["/home/USER/.local/bin/openfugu", "mcp"],
+    "enabled": true
+  }
+}
+```
+
+Exposed tools: `route`, `run`, `submit`, `poll`, `wait`, `doctor`,
+`list_agents`, `status`. The server reuses the same code path as the
+CLI, so MCP tool calls and CLI calls behave identically.

@@ -540,6 +540,7 @@ fn helpText(allocator: std.mem.Allocator) ![]u8 {
         \\  openfugu agents              list runnable agents (alias: list-agents)
         \\  openfugu usage [--since 1d]  routing ledger usage summary
         \\  openfugu replay <run-id>     show ledger replay for a run
+        \\  openfugu mcp                 start MCP server (stdio JSON-RPC)
         \\
         \\Options (both --flag value and --flag=value are accepted):
         \\  --no-apply             run without applying the candidate patch

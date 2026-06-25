@@ -55,6 +55,27 @@ route tasks through openfugu using the recommended
 planners, exit codes, and task-kind vocabulary so the agent never has
 to read `--help` to discover the interface.
 
+## MCP server mode
+
+openfugu also speaks MCP (Model Context Protocol) over stdio. Coding
+agents that support local MCP servers can call openfugu tools without
+spawning the CLI directly:
+
+```jsonc
+// opencode.jsonc / opencode.json
+"mcp": {
+  "openfugu": {
+    "type": "local",
+    "command": ["/home/USER/.local/bin/openfugu", "mcp"],
+    "enabled": true
+  }
+}
+```
+
+Exposed tools: `route`, `run`, `submit`, `poll`, `wait`, `doctor`,
+`list_agents`, `status`. The server uses the same code path as the
+CLI, so tool calls and CLI calls behave identically.
+
 Real CLI smoke checks are opt-in because they can consume provider quota:
 
 ```sh
