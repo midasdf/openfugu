@@ -138,6 +138,23 @@ coding agents because they avoid ambiguity about what is a flag and
 what is the task text. The positional form (`openfugu "task"`) still
 works for backward compatibility.
 
+## NDJSON streaming
+
+`openfugu run --json "task"` and `openfugu route --json "task"` emit
+line-delimited JSON events so a parent process can consume routing
+and execution progress programmatically:
+
+```jsonl
+{"event":"route_start","task":"fix the flaky test"}
+{"event":"route_decision","router":"heuristic","route":"test_fix","selected":"claude","score":125}
+{"event":"agent_start","agent":"claude"}
+{"event":"agent_done","agent":"claude","accepted":true,"applied":true,"reverified":true}
+{"event":"result","code":0,"agent":"claude","accepted":true,"applied":true,"reverified":true}
+```
+
+Event types: `route_start`, `route_decision`, `agent_start`,
+`agent_done`, `result`, `error`.
+
 Use the `--no-apply` flag to perform dry runs.
 
 Running `openfugu` without arguments starts the ZigZag-based interactive TUI.

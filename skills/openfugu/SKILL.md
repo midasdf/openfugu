@@ -81,6 +81,23 @@ Status values: `queued`, `running`, `ok`, `failed`, `canceled`.
 `wait` exits with the job's exit code when known, so it composes
 with shell scripts.
 
+## NDJSON streaming
+
+`openfugu run --json "task"` and `openfugu route --json "task"` emit
+line-delimited JSON events so a parent process can consume routing
+and execution progress programmatically:
+
+```jsonl
+{"event":"route_start","task":"..."}
+{"event":"route_decision","router":"heuristic","route":"test_fix","selected":"claude","score":125}
+{"event":"agent_start","agent":"claude"}
+{"event":"agent_done","agent":"claude","accepted":true,"applied":true,"reverified":true}
+{"event":"result","code":0,"agent":"claude","accepted":true,"applied":true,"reverified":true}
+```
+
+Event types: `route_start`, `route_decision`, `agent_start`,
+`agent_done`, `result`, `error`.
+
 ## Flag forms
 
 Both `--flag value` and `--flag=value` are accepted everywhere. Coding

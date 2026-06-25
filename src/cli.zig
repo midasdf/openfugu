@@ -170,7 +170,7 @@ pub fn runWithProbeSpecsInRepo(
                 .text = try allocator.dupe(u8, "usage: openfugu route \"task\"\n"),
             };
         };
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), true, optionValue(args, "--job-id"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), true, optionValue(args, "--job-id"), hasFlag(args, "--json"));
     }
     // run <task> is the explicit subcommand form of the positional task.
     // It is the recommended entry point for coding agents because it
@@ -182,7 +182,7 @@ pub fn runWithProbeSpecsInRepo(
                 .text = try allocator.dupe(u8, "usage: openfugu run \"task\"\n"),
             };
         };
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), hasFlag(args, "--route-only"), optionValue(args, "--job-id"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), hasFlag(args, "--route-only"), optionValue(args, "--job-id"), hasFlag(args, "--json"));
     }
     // submit <task> spawns a detached `openfugu run --job-id=<id> "task"`
     // child and returns immediately with the job id. The child updates
@@ -234,7 +234,7 @@ pub fn runWithProbeSpecsInRepo(
         return .{ .code = exit_ok, .text = try renderAgents(allocator, reports) };
     }
     if (try taskText(args)) |task| {
-        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), hasFlag(args, "--route-only"), optionValue(args, "--job-id"));
+        return runFirstRunnableSpec(allocator, io, specs, repo_path, worktree_root, verify_commands, task, hasFlag(args, "--no-apply"), optionValue(args, "--agents"), optionValue(args, "--mode"), optionValue(args, "--depth"), optionValue(args, "--planner"), reviewFromArgs(args), optionValue(args, "--cooldown-agent"), hasFlag(args, "--explain-routing"), hasFlag(args, "--route-only"), optionValue(args, "--job-id"), hasFlag(args, "--json"));
     }
     return run(allocator, args);
 }
@@ -546,6 +546,7 @@ fn helpText(allocator: std.mem.Allocator) ![]u8 {
         \\  --no-apply             run without applying the candidate patch
         \\  --explain-routing      print router score and selected agent
         \\  --route-only           print router score without executing
+        \\  --json                 emit NDJSON events (route_start, route_decision, agent_start, agent_done, result)
         \\  --agents <name>        restrict execution to one agent
         \\                         aliases: claude, claudecode, claude-code,
         \\                                   codex, agy, antigravity
@@ -597,7 +598,8 @@ fn taskText(args: []const []const u8) !?[]const u8 {
             std.mem.eql(u8, arg, "--require-model-review") or
             std.mem.eql(u8, arg, "--reject-model-review") or
             std.mem.eql(u8, arg, "--route-only") or
-            std.mem.eql(u8, arg, "--explain-routing")) continue;
+            std.mem.eql(u8, arg, "--explain-routing") or
+            std.mem.eql(u8, arg, "--json")) continue;
         if (isInlineValue(arg)) {
             // --flag=value: no separate value token to consume.
             continue;
@@ -758,7 +760,8 @@ fn subcommandTask(args: []const []const u8) ?[]const u8 {
             std.mem.eql(u8, arg, "--require-model-review") or
             std.mem.eql(u8, arg, "--reject-model-review") or
             std.mem.eql(u8, arg, "--route-only") or
-            std.mem.eql(u8, arg, "--explain-routing")) continue;
+            std.mem.eql(u8, arg, "--explain-routing") or
+            std.mem.eql(u8, arg, "--json")) continue;
         if (isInlineValue(arg)) continue;
         if (takesValue(arg)) {
             i += 1;
@@ -819,6 +822,7 @@ fn runFirstRunnableSpec(
     explain_routing: bool,
     route_only: bool,
     job_id: ?[]const u8,
+    json_output: bool,
 ) !Result {
     // When invoked via `submit`, the child is given --job-id=<id>. We
     // update the job file at start and completion so poll/wait work
@@ -832,12 +836,38 @@ fn runFirstRunnableSpec(
             .started_ms = nowMs(io),
         }) catch {};
     }
+    var json_events: std.ArrayList(u8) = .empty;
+    defer json_events.deinit(allocator);
+    const emit = struct {
+        fn ev(buf: *std.ArrayList(u8), alloc: std.mem.Allocator, event: []const u8, data: []const u8) void {
+            buf.print(alloc, "{{\"event\":\"{s}\",{s}}}\n", .{ event, data }) catch {};
+        }
+    };
     // errdefer at function scope so it fires on any error return from
     // this point onward, regardless of which block raised the error.
     errdefer {
         if (has_job) {
             finishJob(allocator, io, job_id.?, exit_planner, "", "heuristic", "unknown", "error before completion") catch {};
         }
+        if (json_output) {
+            const data = std.fmt.allocPrint(allocator, "\"code\":{d}", .{exit_planner}) catch null;
+            defer if (data) |d| allocator.free(d);
+            if (data) |d| emit.ev(&json_events, allocator, "error", d);
+            const text = json_events.toOwnedSlice(allocator) catch null;
+            if (text) |t| {
+                defer allocator.free(t);
+                const stdout = std.Io.File.stdout();
+                var buf: [4096]u8 = undefined;
+                var writer = stdout.writer(io, &buf);
+                writer.interface.writeAll(t) catch {};
+                writer.interface.flush() catch {};
+            }
+        }
+    }
+    if (json_output) {
+        const data = std.fmt.allocPrint(allocator, "\"task\":\"{s}\"", .{task_text}) catch return error.OutOfMemory;
+        defer allocator.free(data);
+        emit.ev(&json_events, allocator, "route_start", data);
     }
     try std.Io.Dir.cwd().createDirPath(io, worktree_root);
     var candidates = try allocator.alloc(RoutingCandidate, specs.len);
@@ -891,12 +921,37 @@ fn runFirstRunnableSpec(
         });
     }
     sortRoutingCandidates(candidates[0..candidate_count]);
+    if (json_output and candidate_count > 0 and !route_only) {
+        const sel = candidates[0];
+        const data = std.fmt.allocPrint(allocator, "\"router\":\"{s}\",\"route\":\"{s}\",\"selected\":\"{s}\",\"score\":{d}", .{ router_name, @tagName(kind), sel.report.name, sel.score }) catch return error.OutOfMemory;
+        defer allocator.free(data);
+        emit.ev(&json_events, allocator, "route_decision", data);
+    }
 
     if (route_only) {
         if (candidate_count == 0) {
+            if (json_output) {
+                const data = std.fmt.allocPrint(allocator, "\"code\":{d}", .{exit_no_agent}) catch return error.OutOfMemory;
+                defer allocator.free(data);
+                emit.ev(&json_events, allocator, "error", data);
+                return .{
+                    .code = exit_no_agent,
+                    .text = try json_events.toOwnedSlice(allocator),
+                };
+            }
             return .{
                 .code = exit_no_agent,
                 .text = try allocator.dupe(u8, "no subscription-compatible agent available; run `openfugu doctor` for details\n"),
+            };
+        }
+        if (json_output) {
+            const sel = candidates[0];
+            const data = std.fmt.allocPrint(allocator, "\"router\":\"{s}\",\"route\":\"{s}\",\"selected\":\"{s}\",\"score\":{d}", .{ router_name, @tagName(kind), sel.report.name, sel.score }) catch return error.OutOfMemory;
+            defer allocator.free(data);
+            emit.ev(&json_events, allocator, "route_decision", data);
+            return .{
+                .code = exit_ok,
+                .text = try json_events.toOwnedSlice(allocator),
             };
         }
         var out: std.ArrayList(u8) = .empty;
@@ -936,6 +991,11 @@ fn runFirstRunnableSpec(
     }
 
     for (candidates[0..candidate_count]) |*candidate| {
+        if (json_output) {
+            const data = std.fmt.allocPrint(allocator, "\"agent\":\"{s}\"", .{candidate.report.name}) catch return error.OutOfMemory;
+            defer allocator.free(data);
+            emit.ev(&json_events, allocator, "agent_start", data);
+        }
         const candidate_path = try candidateWorktreePath(allocator, io, worktree_root, candidate.report.name);
         defer allocator.free(candidate_path);
         var owned_invocation = try invocationForSpec(allocator, candidate.spec, task_text, candidate_path);
@@ -968,8 +1028,22 @@ fn runFirstRunnableSpec(
         });
 
         const code = if (summary.accepted and (no_apply or (summary.applied and summary.reverified))) exit_ok else exit_verify;
+        if (json_output) {
+            const data = std.fmt.allocPrint(allocator, "\"agent\":\"{s}\",\"accepted\":{},\"applied\":{},\"reverified\":{}", .{ candidate.report.name, summary.accepted, summary.applied, summary.reverified }) catch return error.OutOfMemory;
+            defer allocator.free(data);
+            emit.ev(&json_events, allocator, "agent_done", data);
+        }
         if (code != exit_ok and continuesAfterFailure(mode, depth)) continue;
         if (has_job) try finishJob(allocator, io, job_id.?, code, candidate.report.name, router_name, @tagName(kind), summary_text(summary));
+        if (json_output) {
+            const data = std.fmt.allocPrint(allocator, "\"code\":{d},\"agent\":\"{s}\",\"accepted\":{},\"applied\":{},\"reverified\":{}", .{ code, candidate.report.name, summary.accepted, summary.applied, summary.reverified }) catch return error.OutOfMemory;
+            defer allocator.free(data);
+            emit.ev(&json_events, allocator, "result", data);
+            return .{
+                .code = code,
+                .text = try json_events.toOwnedSlice(allocator),
+            };
+        }
         if (explain_routing) {
             return .{
                 .code = code,
